@@ -27,7 +27,7 @@ const menu = [
   ["⛽", "Abastecimentos", "/"],
   ["🔧", "Manutenção", "/"],
   ["👥", "Clientes", "/"],
-  ["📈", "Relatórios", "/"],
+  ["📈", "Relatórios", "/relatorios"],
   ["⚙️", "Configurações", "/"],
 ];
 
