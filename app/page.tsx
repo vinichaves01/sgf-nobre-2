@@ -21,12 +21,12 @@ type Lancamento = {
 const menu = [
   ["📊", "Dashboard", "/"],
   ["🚛", "Frota", "/frota"],
-  ["👨‍✈️", "Motoristas", "/"],
-  ["🗺️", "Viagens", "/"],
+  ["👨‍✈️", "Motoristas", "/motoristas"],
+  ["🗺️", "Viagens", "/viagens"],
   ["💰", "Financeiro", "/financeiro"],
-  ["⛽", "Abastecimentos", "/"],
-  ["🔧", "Manutenção", "/"],
-  ["👥", "Clientes", "/"],
+  ["⛽", "Abastecimentos", "/abastecimentos"],
+  ["🔧", "Manutenção", "/manutencao"],
+  ["👥", "Clientes", "/clientes"],
   ["📈", "Relatórios", "/relatorios"],
   ["⚙️", "Configurações", "/"],
 ];
