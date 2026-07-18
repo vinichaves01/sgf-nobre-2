@@ -100,11 +100,13 @@ export default function FrotaPage() {
       return;
     }
 
+    const estavaEditando = Boolean(veiculoEditando);
+
     setFormulario(formularioInicial);
     setVeiculoEditando(null);
     setMostrarFormulario(false);
     setMensagem(
-      veiculoEditando
+      estavaEditando
         ? "Veículo atualizado com sucesso."
         : "Veículo cadastrado com sucesso."
     );
