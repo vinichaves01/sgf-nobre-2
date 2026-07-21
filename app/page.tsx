@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import MobileNav from "@/components/MobileNav";
 
@@ -19,6 +20,12 @@ type Lancamento = {
   status: "Recebido" | "A receber" | "Pago" | "A pagar";
 };
 
+type Perfil = {
+  nome: string | null;
+  tipo: "Administrador" | "Motorista";
+  ativo: boolean;
+};
+
 const menu = [
   ["📊", "Dashboard", "/"],
   ["🚛", "Frota", "/frota"],
@@ -33,55 +40,302 @@ const menu = [
 ];
 
 export default function Home() {
+  const router = useRouter();
+
   const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
-  const [lancamentos, setLancamentos] = useState<Lancamento[]>(
-    []
-  );
+  const [lancamentos, setLancamentos] = useState<Lancamento[]>([]);
+  const [perfil, setPerfil] = useState<Perfil | null>(null);
+
+  const [sessaoPronta, setSessaoPronta] = useState(false);
+  const [frotaCarregada, setFrotaCarregada] = useState(false);
+  const [financeiroCarregado, setFinanceiroCarregado] =
+    useState(false);
+
   const [carregando, setCarregando] = useState(true);
+  const [atualizando, setAtualizando] = useState(false);
   const [erro, setErro] = useState("");
 
-  useEffect(() => {
-    async function carregarDashboard() {
-      setCarregando(true);
-      setErro("");
+  const carregarDashboard = useCallback(
+    async (silencioso = false) => {
+      if (silencioso) {
+        setAtualizando(true);
+      } else {
+        setCarregando(true);
+      }
 
-      const [resultadoVeiculos, resultadoFinanceiro] =
-        await Promise.all([
-          supabase
-            .from("veiculos")
-            .select("id, status"),
+      const {
+        data: { session },
+        error: erroSessao,
+      } = await supabase.auth.getSession();
 
-          supabase
-            .from("financeiro")
-            .select(
-              "id, descricao, tipo, valor, vencimento, status"
-            )
-            .order("vencimento", {
-              ascending: true,
-            }),
-        ]);
+      if (erroSessao) {
+        setErro(
+          `Não foi possível recuperar sua sessão: ${erroSessao.message}`
+        );
+        setCarregando(false);
+        setAtualizando(false);
+        return;
+      }
+
+      if (!session) {
+        setSessaoPronta(false);
+        setCarregando(false);
+        setAtualizando(false);
+        router.replace("/login");
+        return;
+      }
+
+      setSessaoPronta(true);
+
+      const [
+        resultadoVeiculos,
+        resultadoFinanceiro,
+        resultadoPerfil,
+      ] = await Promise.all([
+        supabase
+          .from("veiculos")
+          .select("id, status"),
+
+        supabase
+          .from("financeiro")
+          .select(
+            "id, descricao, tipo, valor, vencimento, status"
+          )
+          .order("vencimento", {
+            ascending: true,
+          }),
+
+        supabase
+          .from("perfis")
+          .select("nome, tipo, ativo")
+          .eq("id", session.user.id)
+          .maybeSingle(),
+      ]);
+
+      const erros: string[] = [];
 
       if (resultadoVeiculos.error) {
-        setErro(
-          `Erro na frota: ${resultadoVeiculos.error.message}`
+        erros.push(
+          `Frota: ${resultadoVeiculos.error.message}`
         );
       } else {
         setVeiculos(resultadoVeiculos.data ?? []);
+        setFrotaCarregada(true);
       }
 
       if (resultadoFinanceiro.error) {
-        setErro(
-          `Erro no financeiro: ${resultadoFinanceiro.error.message}`
+        erros.push(
+          `Financeiro: ${resultadoFinanceiro.error.message}`
         );
       } else {
         setLancamentos(resultadoFinanceiro.data ?? []);
+        setFinanceiroCarregado(true);
+      }
+
+      if (resultadoPerfil.error) {
+        erros.push(
+          `Perfil: ${resultadoPerfil.error.message}`
+        );
+      } else if (resultadoPerfil.data) {
+        setPerfil(resultadoPerfil.data as Perfil);
+      }
+
+      if (erros.length > 0) {
+        setErro(
+          `Alguns dados não puderam ser atualizados — ${erros.join(
+            " | "
+          )}`
+        );
+      } else {
+        setErro("");
       }
 
       setCarregando(false);
+      setAtualizando(false);
+    },
+    [router]
+  );
+
+  useEffect(() => {
+    let ativo = true;
+    let canal: ReturnType<typeof supabase.channel> | null =
+      null;
+
+    const atualizarSilenciosamente = () => {
+      if (ativo) {
+        void carregarDashboard(true);
+      }
+    };
+
+    const iniciar = async () => {
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
+
+      if (!ativo) return;
+
+      if (error) {
+        setErro(
+          `Não foi possível recuperar sua sessão: ${error.message}`
+        );
+        setCarregando(false);
+        return;
+      }
+
+      if (!session) {
+        setSessaoPronta(false);
+        setCarregando(false);
+        router.replace("/login");
+        return;
+      }
+
+      setSessaoPronta(true);
+      await carregarDashboard(false);
+
+      if (!ativo) return;
+
+      canal = supabase
+        .channel(`dashboard-tempo-real-${Date.now()}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "veiculos",
+          },
+          atualizarSilenciosamente
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "financeiro",
+          },
+          atualizarSilenciosamente
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "perfis",
+          },
+          atualizarSilenciosamente
+        )
+        .subscribe((status) => {
+          if (
+            status === "CHANNEL_ERROR" ||
+            status === "TIMED_OUT"
+          ) {
+            setErro(
+              "A atualização em tempo real foi interrompida. O sistema continuará tentando sincronizar automaticamente."
+            );
+          }
+        });
+    };
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(
+      (_evento, session) => {
+        if (!ativo) return;
+
+        if (!session) {
+          setSessaoPronta(false);
+          router.replace("/login");
+          return;
+        }
+
+        setSessaoPronta(true);
+
+        window.setTimeout(() => {
+          atualizarSilenciosamente();
+        }, 0);
+      }
+    );
+
+    const atualizarAoVoltar = () => {
+      if (document.visibilityState === "visible") {
+        atualizarSilenciosamente();
+      }
+    };
+
+    window.addEventListener(
+      "focus",
+      atualizarSilenciosamente
+    );
+
+    document.addEventListener(
+      "visibilitychange",
+      atualizarAoVoltar
+    );
+
+    const verificacaoSeguranca = window.setInterval(
+      atualizarSilenciosamente,
+      15000
+    );
+
+    void iniciar();
+
+    return () => {
+      ativo = false;
+
+      subscription.unsubscribe();
+
+      window.removeEventListener(
+        "focus",
+        atualizarSilenciosamente
+      );
+
+      document.removeEventListener(
+        "visibilitychange",
+        atualizarAoVoltar
+      );
+
+      window.clearInterval(verificacaoSeguranca);
+
+      if (canal) {
+        void supabase.removeChannel(canal);
+      }
+    };
+  }, [carregarDashboard, router]);
+
+  async function sairDoSistema() {
+    setErro("");
+
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      setErro(`Erro ao sair: ${error.message}`);
+      return;
     }
 
-    carregarDashboard();
-  }, []);
+    router.replace("/login");
+    router.refresh();
+  }
+
+  if (!sessaoPronta) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-6 text-slate-900">
+        <div className="w-full max-w-md rounded-2xl border bg-white p-6 text-center shadow-sm">
+          <div className="text-2xl font-bold text-amber-500">
+            NOBRE
+          </div>
+
+          <p className="mt-4 font-semibold">
+            Restaurando sua sessão...
+          </p>
+
+          <p className="mt-2 text-sm text-slate-500">
+            Seus dados serão exibidos assim que o acesso for
+            confirmado.
+          </p>
+        </div>
+      </main>
+    );
+  }
 
   const totalVeiculos = veiculos.length;
 
@@ -165,8 +419,18 @@ export default function Home() {
           ))}
         </nav>
 
-        <div className="border-t border-slate-800 p-4 text-xs text-slate-500">
-          SGF Nobre 2.0
+        <div className="border-t border-slate-800 p-4">
+          <button
+            type="button"
+            onClick={sairDoSistema}
+            className="w-full rounded-xl border border-slate-700 px-4 py-3 text-sm font-semibold text-slate-200 transition hover:bg-slate-800"
+          >
+            Sair do sistema
+          </button>
+
+          <p className="mt-3 text-center text-xs text-slate-500">
+            SGF Nobre 2.0
+          </p>
         </div>
       </aside>
 
@@ -182,8 +446,16 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-medium">
-            Administrador
+          <div className="flex items-center gap-3">
+            {atualizando && (
+              <span className="text-xs text-slate-400">
+                Atualizando...
+              </span>
+            )}
+
+            <div className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-medium">
+              {perfil?.tipo ?? "Administrador"}
+            </div>
           </div>
         </header>
 
@@ -209,13 +481,19 @@ export default function Home() {
             </div>
           )}
 
+          {carregando && (
+            <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-blue-700">
+              Carregando os dados do Dashboard...
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-5">
             <Card
               titulo="Total de veículos"
               valor={
-                carregando
-                  ? "..."
-                  : String(totalVeiculos)
+                frotaCarregada
+                  ? String(totalVeiculos)
+                  : "..."
               }
               detalhe="Veículos cadastrados"
             />
@@ -223,7 +501,7 @@ export default function Home() {
             <Card
               titulo="Veículos ativos"
               valor={
-                carregando ? "..." : String(ativos)
+                frotaCarregada ? String(ativos) : "..."
               }
               detalhe="Frota operacional"
             />
@@ -231,9 +509,9 @@ export default function Home() {
             <Card
               titulo="Contas a pagar"
               valor={
-                carregando
-                  ? "..."
-                  : formatarMoeda(aPagar)
+                financeiroCarregado
+                  ? formatarMoeda(aPagar)
+                  : "..."
               }
               detalhe="Valores pendentes"
             />
@@ -241,9 +519,9 @@ export default function Home() {
             <Card
               titulo="Contas a receber"
               valor={
-                carregando
-                  ? "..."
-                  : formatarMoeda(aReceber)
+                financeiroCarregado
+                  ? formatarMoeda(aReceber)
+                  : "..."
               }
               detalhe="Receitas pendentes"
             />
@@ -252,9 +530,9 @@ export default function Home() {
               <Card
                 titulo="Saldo em caixa"
                 valor={
-                  carregando
-                    ? "..."
-                    : formatarMoeda(saldoCaixa)
+                  financeiroCarregado
+                    ? formatarMoeda(saldoCaixa)
+                    : "..."
                 }
                 detalhe="Recebido menos despesas pagas"
               />
