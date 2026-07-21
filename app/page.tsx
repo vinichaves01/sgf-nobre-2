@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import MobileNav from "@/components/MobileNav";
 
 type Veiculo = {
   id: string;
@@ -33,7 +34,9 @@ const menu = [
 
 export default function Home() {
   const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
-  const [lancamentos, setLancamentos] = useState<Lancamento[]>([]);
+  const [lancamentos, setLancamentos] = useState<Lancamento[]>(
+    []
+  );
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
 
@@ -42,22 +45,34 @@ export default function Home() {
       setCarregando(true);
       setErro("");
 
-      const [resultadoVeiculos, resultadoFinanceiro] = await Promise.all([
-        supabase.from("veiculos").select("id, status"),
-        supabase
-          .from("financeiro")
-          .select("id, descricao, tipo, valor, vencimento, status")
-          .order("vencimento", { ascending: true }),
-      ]);
+      const [resultadoVeiculos, resultadoFinanceiro] =
+        await Promise.all([
+          supabase
+            .from("veiculos")
+            .select("id, status"),
+
+          supabase
+            .from("financeiro")
+            .select(
+              "id, descricao, tipo, valor, vencimento, status"
+            )
+            .order("vencimento", {
+              ascending: true,
+            }),
+        ]);
 
       if (resultadoVeiculos.error) {
-        setErro(`Erro na frota: ${resultadoVeiculos.error.message}`);
+        setErro(
+          `Erro na frota: ${resultadoVeiculos.error.message}`
+        );
       } else {
         setVeiculos(resultadoVeiculos.data ?? []);
       }
 
       if (resultadoFinanceiro.error) {
-        setErro(`Erro no financeiro: ${resultadoFinanceiro.error.message}`);
+        setErro(
+          `Erro no financeiro: ${resultadoFinanceiro.error.message}`
+        );
       } else {
         setLancamentos(resultadoFinanceiro.data ?? []);
       }
@@ -84,25 +99,39 @@ export default function Home() {
 
   const aPagar = lancamentos
     .filter((item) => item.status === "A pagar")
-    .reduce((total, item) => total + Number(item.valor), 0);
+    .reduce(
+      (total, item) => total + Number(item.valor),
+      0
+    );
 
   const aReceber = lancamentos
     .filter((item) => item.status === "A receber")
-    .reduce((total, item) => total + Number(item.valor), 0);
+    .reduce(
+      (total, item) => total + Number(item.valor),
+      0
+    );
 
   const pago = lancamentos
     .filter((item) => item.status === "Pago")
-    .reduce((total, item) => total + Number(item.valor), 0);
+    .reduce(
+      (total, item) => total + Number(item.valor),
+      0
+    );
 
   const recebido = lancamentos
     .filter((item) => item.status === "Recebido")
-    .reduce((total, item) => total + Number(item.valor), 0);
+    .reduce(
+      (total, item) => total + Number(item.valor),
+      0
+    );
 
   const saldoCaixa = recebido - pago;
 
   const proximosVencimentos = lancamentos
     .filter(
-      (item) => item.status === "A pagar" || item.status === "A receber"
+      (item) =>
+        item.status === "A pagar" ||
+        item.status === "A receber"
     )
     .slice(0, 6);
 
@@ -110,7 +139,9 @@ export default function Home() {
     <div className="min-h-screen bg-slate-100 text-slate-900">
       <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col bg-slate-950 text-white md:flex">
         <div className="border-b border-slate-800 px-6 py-6">
-          <div className="text-2xl font-bold text-amber-400">NOBRE</div>
+          <div className="text-2xl font-bold text-amber-400">
+            NOBRE
+          </div>
 
           <div className="text-sm text-slate-400">
             Sistema de Gestão de Frota
@@ -139,12 +170,14 @@ export default function Home() {
         </div>
       </aside>
 
-      <main className="md:ml-64">
-        <header className="flex items-center justify-between border-b bg-white px-6 py-5 shadow-sm">
+      <main className="pb-28 md:ml-64 md:pb-0">
+        <header className="flex flex-wrap items-center justify-between gap-3 border-b bg-white px-4 py-4 shadow-sm sm:px-6 sm:py-5">
           <div>
-            <h1 className="text-2xl font-bold">Dashboard</h1>
+            <h1 className="text-2xl font-bold">
+              Dashboard
+            </h1>
 
-            <p className="text-sm text-slate-500">
+            <p className="mt-1 text-sm text-slate-500">
               Gestão inteligente para quem move o Brasil.
             </p>
           </div>
@@ -154,16 +187,19 @@ export default function Home() {
           </div>
         </header>
 
-        <section className="p-6">
-          <div className="mb-6 rounded-2xl bg-slate-950 p-7 text-white shadow-lg">
-            <p className="text-sm text-amber-400">Nobre Transportadora</p>
+        <section className="p-4 sm:p-6">
+          <div className="mb-5 rounded-2xl bg-slate-950 p-5 text-white shadow-lg sm:mb-6 sm:p-7">
+            <p className="text-sm text-amber-400">
+              Nobre Transportadora
+            </p>
 
-            <h2 className="mt-2 text-3xl font-bold">
+            <h2 className="mt-2 text-2xl font-bold sm:text-3xl">
               Visão geral da operação
             </h2>
 
-            <p className="mt-2 text-slate-400">
-              Frota, financeiro e vencimentos em um só lugar.
+            <p className="mt-2 text-sm leading-6 text-slate-400 sm:text-base">
+              Frota, financeiro e vencimentos em um só
+              lugar.
             </p>
           </div>
 
@@ -173,42 +209,64 @@ export default function Home() {
             </div>
           )}
 
-          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-5">
             <Card
               titulo="Total de veículos"
-              valor={carregando ? "..." : String(totalVeiculos)}
+              valor={
+                carregando
+                  ? "..."
+                  : String(totalVeiculos)
+              }
               detalhe="Veículos cadastrados"
             />
 
             <Card
               titulo="Veículos ativos"
-              valor={carregando ? "..." : String(ativos)}
+              valor={
+                carregando ? "..." : String(ativos)
+              }
               detalhe="Frota operacional"
             />
 
             <Card
               titulo="Contas a pagar"
-              valor={carregando ? "..." : formatarMoeda(aPagar)}
+              valor={
+                carregando
+                  ? "..."
+                  : formatarMoeda(aPagar)
+              }
               detalhe="Valores pendentes"
             />
 
             <Card
               titulo="Contas a receber"
-              valor={carregando ? "..." : formatarMoeda(aReceber)}
+              valor={
+                carregando
+                  ? "..."
+                  : formatarMoeda(aReceber)
+              }
               detalhe="Receitas pendentes"
             />
 
-            <Card
-              titulo="Saldo em caixa"
-              valor={carregando ? "..." : formatarMoeda(saldoCaixa)}
-              detalhe="Recebido menos despesas pagas"
-            />
+            <div className="col-span-2 xl:col-span-1">
+              <Card
+                titulo="Saldo em caixa"
+                valor={
+                  carregando
+                    ? "..."
+                    : formatarMoeda(saldoCaixa)
+                }
+                detalhe="Recebido menos despesas pagas"
+              />
+            </div>
           </div>
 
-          <div className="mt-6 grid gap-6 xl:grid-cols-2">
-            <section className="rounded-2xl border bg-white p-6 shadow-sm">
-              <div className="flex items-center justify-between">
-                <h3 className="text-lg font-bold">Próximos vencimentos</h3>
+          <div className="mt-5 grid gap-5 xl:mt-6 xl:grid-cols-2 xl:gap-6">
+            <section className="rounded-2xl border bg-white p-4 shadow-sm sm:p-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h3 className="text-lg font-bold">
+                  Próximos vencimentos
+                </h3>
 
                 <Link
                   href="/financeiro"
@@ -225,18 +283,25 @@ export default function Home() {
               ) : (
                 <div className="mt-5 space-y-3">
                   {proximosVencimentos.map((item) => {
-                    const alerta = calcularAlerta(item.vencimento);
+                    const alerta = calcularAlerta(
+                      item.vencimento
+                    );
 
                     return (
                       <div
                         key={item.id}
-                        className="flex items-center justify-between rounded-xl border p-4"
+                        className="flex flex-col gap-4 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between"
                       >
                         <div>
-                          <p className="font-semibold">{item.descricao}</p>
+                          <p className="font-semibold">
+                            {item.descricao}
+                          </p>
 
                           <p className="mt-1 text-sm text-slate-500">
-                            {item.tipo} • {formatarData(item.vencimento)}
+                            {item.tipo} •{" "}
+                            {formatarData(
+                              item.vencimento
+                            )}
                           </p>
 
                           <span
@@ -246,9 +311,11 @@ export default function Home() {
                           </span>
                         </div>
 
-                        <div className="text-right">
+                        <div className="sm:text-right">
                           <p className="font-bold">
-                            {formatarMoeda(item.valor)}
+                            {formatarMoeda(
+                              item.valor
+                            )}
                           </p>
 
                           <p className="mt-1 text-sm text-slate-500">
@@ -262,10 +329,12 @@ export default function Home() {
               )}
             </section>
 
-            <section className="rounded-2xl border bg-white p-6 shadow-sm">
-              <h3 className="text-lg font-bold">Resumo financeiro</h3>
+            <section className="rounded-2xl border bg-white p-4 shadow-sm sm:p-6">
+              <h3 className="text-lg font-bold">
+                Resumo financeiro
+              </h3>
 
-              <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="mt-5 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-3">
                 <Resumo
                   titulo="Recebido"
                   valor={recebido}
@@ -290,18 +359,22 @@ export default function Home() {
                   detalhe="Despesas pendentes"
                 />
 
-                <Resumo
-                  titulo="Saldo em caixa"
-                  valor={saldoCaixa}
-                  detalhe="Recebido menos despesas pagas"
-                />
+                <div className="col-span-2 xl:col-span-1">
+                  <Resumo
+                    titulo="Saldo em caixa"
+                    valor={saldoCaixa}
+                    detalhe="Recebido menos despesas pagas"
+                  />
+                </div>
               </div>
             </section>
           </div>
 
-          <div className="mt-6 grid gap-6 xl:grid-cols-2">
-            <section className="rounded-2xl border bg-white p-6 shadow-sm">
-              <h3 className="text-lg font-bold">Situação da frota</h3>
+          <div className="mt-5 grid gap-5 xl:mt-6 xl:grid-cols-2 xl:gap-6">
+            <section className="rounded-2xl border bg-white p-4 shadow-sm sm:p-6">
+              <h3 className="text-lg font-bold">
+                Situação da frota
+              </h3>
 
               <div className="mt-5 space-y-5">
                 <Status
@@ -324,28 +397,68 @@ export default function Home() {
               </div>
             </section>
 
-            <section className="rounded-2xl border bg-white p-6 shadow-sm">
-              <h3 className="text-lg font-bold">Acesso rápido</h3>
+            <section className="rounded-2xl border bg-white p-4 shadow-sm sm:p-6">
+              <h3 className="text-lg font-bold">
+                Acesso rápido
+              </h3>
 
-              <div className="mt-5 grid gap-4 sm:grid-cols-2">
+              <div className="mt-5 grid grid-cols-2 gap-3 sm:gap-4">
+                <Link
+                  href="/viagens"
+                  className="rounded-xl border bg-slate-50 p-4 transition hover:border-amber-400 hover:bg-amber-50 sm:p-5"
+                >
+                  <p className="text-2xl">🗺️</p>
+
+                  <p className="mt-3 font-bold">
+                    Viagens
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-500 sm:text-sm">
+                    Iniciar e acompanhar operações.
+                  </p>
+                </Link>
+
+                <Link
+                  href="/motoristas"
+                  className="rounded-xl border bg-slate-50 p-4 transition hover:border-amber-400 hover:bg-amber-50 sm:p-5"
+                >
+                  <p className="text-2xl">👨‍✈️</p>
+
+                  <p className="mt-3 font-bold">
+                    Motoristas
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-500 sm:text-sm">
+                    Consultar e gerenciar motoristas.
+                  </p>
+                </Link>
+
                 <Link
                   href="/frota"
-                  className="rounded-xl border bg-slate-50 p-5 transition hover:border-amber-400 hover:bg-amber-50"
+                  className="rounded-xl border bg-slate-50 p-4 transition hover:border-amber-400 hover:bg-amber-50 sm:p-5"
                 >
                   <p className="text-2xl">🚛</p>
-                  <p className="mt-3 font-bold">Gerenciar frota</p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Cadastrar, editar e controlar veículos.
+
+                  <p className="mt-3 font-bold">
+                    Gerenciar frota
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-500 sm:text-sm">
+                    Cadastrar e controlar veículos.
                   </p>
                 </Link>
 
                 <Link
                   href="/financeiro"
-                  className="rounded-xl border bg-slate-50 p-5 transition hover:border-amber-400 hover:bg-amber-50"
+                  className="rounded-xl border bg-slate-50 p-4 transition hover:border-amber-400 hover:bg-amber-50 sm:p-5"
                 >
                   <p className="text-2xl">💰</p>
-                  <p className="mt-3 font-bold">Financeiro</p>
-                  <p className="mt-1 text-sm text-slate-500">
+
+                  <p className="mt-3 font-bold">
+                    Financeiro
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-500 sm:text-sm">
                     Contas a pagar e receber.
                   </p>
                 </Link>
@@ -354,6 +467,8 @@ export default function Home() {
           </div>
         </section>
       </main>
+
+      <MobileNav />
     </div>
   );
 }
@@ -368,10 +483,18 @@ function Card({
   detalhe: string;
 }) {
   return (
-    <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-sm font-medium text-slate-500">{titulo}</p>
-      <p className="mt-3 text-2xl font-bold">{valor}</p>
-      <p className="mt-2 text-sm text-slate-400">{detalhe}</p>
+    <article className="h-full rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+      <p className="text-xs font-medium text-slate-500 sm:text-sm">
+        {titulo}
+      </p>
+
+      <p className="mt-3 break-words text-xl font-bold sm:text-2xl">
+        {valor}
+      </p>
+
+      <p className="mt-2 text-xs text-slate-400 sm:text-sm">
+        {detalhe}
+      </p>
     </article>
   );
 }
@@ -386,10 +509,18 @@ function Resumo({
   detalhe: string;
 }) {
   return (
-    <div className="rounded-xl border bg-slate-50 p-4">
-      <p className="text-sm text-slate-500">{titulo}</p>
-      <p className="mt-2 text-xl font-bold">{formatarMoeda(valor)}</p>
-      <p className="mt-1 text-xs text-slate-400">{detalhe}</p>
+    <div className="h-full rounded-xl border bg-slate-50 p-3 sm:p-4">
+      <p className="text-xs text-slate-500 sm:text-sm">
+        {titulo}
+      </p>
+
+      <p className="mt-2 break-words text-base font-bold sm:text-xl">
+        {formatarMoeda(valor)}
+      </p>
+
+      <p className="mt-1 text-xs text-slate-400">
+        {detalhe}
+      </p>
     </div>
   );
 }
@@ -403,7 +534,8 @@ function Status({
   quantidade: number;
   total: number;
 }) {
-  const percentual = total > 0 ? (quantidade / total) * 100 : 0;
+  const percentual =
+    total > 0 ? (quantidade / total) * 100 : 0;
 
   return (
     <div>
@@ -415,7 +547,9 @@ function Status({
       <div className="h-2 rounded-full bg-slate-200">
         <div
           className="h-2 rounded-full bg-amber-400"
-          style={{ width: `${percentual}%` }}
+          style={{
+            width: `${percentual}%`,
+          }}
         />
       </div>
     </div>
@@ -430,22 +564,29 @@ function formatarMoeda(valor: number) {
 }
 
 function formatarData(data: string) {
-  return new Date(`${data}T12:00:00`).toLocaleDateString("pt-BR");
+  return new Date(
+    `${data}T12:00:00`
+  ).toLocaleDateString("pt-BR");
 }
 
 function calcularAlerta(vencimento: string) {
   const hoje = new Date();
   hoje.setHours(12, 0, 0, 0);
 
-  const dataVencimento = new Date(`${vencimento}T12:00:00`);
+  const dataVencimento = new Date(
+    `${vencimento}T12:00:00`
+  );
 
   const diferenca = Math.ceil(
-    (dataVencimento.getTime() - hoje.getTime()) / 86400000
+    (dataVencimento.getTime() - hoje.getTime()) /
+      86400000
   );
 
   if (diferenca < 0) {
     return {
-      texto: `Vencida há ${Math.abs(diferenca)} dia(s)`,
+      texto: `Vencida há ${Math.abs(
+        diferenca
+      )} dia(s)`,
       classe: "bg-red-100 text-red-700",
     };
   }
