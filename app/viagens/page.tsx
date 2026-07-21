@@ -117,28 +117,6 @@ export default function ViagensPage() {
         setCarregando(true);
       }
 
-      const {
-        data: { session },
-        error: erroSessao,
-      } = await supabase.auth.getSession();
-
-      if (erroSessao) {
-        setMensagem(
-          `Não foi possível recuperar sua sessão: ${erroSessao.message}`
-        );
-        setCarregando(false);
-        return;
-      }
-
-      if (!session) {
-        setSessaoPronta(false);
-        setCarregando(false);
-        router.replace("/login");
-        return;
-      }
-
-      setSessaoPronta(true);
-
       const [
         resultadoViagens,
         resultadoMotoristas,
@@ -192,20 +170,23 @@ export default function ViagensPage() {
         setMensagem(
           `Erro ao atualizar os dados — ${erros.join(" | ")}`
         );
+      } else {
+        setMensagem("");
       }
 
       setCarregando(false);
     },
-    [router]
+    []
   );
 
   useEffect(() => {
     let ativo = true;
 
     const atualizarSilenciosamente = () => {
-      if (ativo) {
-        void carregarDados(true);
-      }
+      if (!ativo) return;
+
+      setAgora(new Date());
+      void carregarDados(true);
     };
 
     const iniciar = async () => {
@@ -233,10 +214,11 @@ export default function ViagensPage() {
 
       setSessaoPronta(true);
       await carregarDados(false);
+      setAgora(new Date());
     };
 
     const canal = supabase
-      .channel(`viagens-tempo-real-${Date.now()}`)
+      .channel("viagens-tempo-real")
       .on(
         "postgres_changes",
         {
@@ -264,27 +246,34 @@ export default function ViagensPage() {
         },
         atualizarSilenciosamente
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (
+          status === "CHANNEL_ERROR" ||
+          status === "TIMED_OUT"
+        ) {
+          setMensagem(
+            "A conexão em tempo real foi interrompida. Atualize a página caso os dados parem de sincronizar."
+          );
+        }
+      });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_evento, session) => {
-      if (!ativo) return;
+    } = supabase.auth.onAuthStateChange(
+      (_evento, session) => {
+        if (!ativo) return;
 
-      if (!session) {
-        setSessaoPronta(false);
-        router.replace("/login");
-        return;
+        if (!session) {
+          setSessaoPronta(false);
+          router.replace("/login");
+          return;
+        }
+
+        setSessaoPronta(true);
       }
+    );
 
-      setSessaoPronta(true);
-
-      window.setTimeout(() => {
-        atualizarSilenciosamente();
-      }, 0);
-    });
-
-    const atualizarAoVoltarParaPagina = () => {
+    const atualizarAoVoltar = () => {
       if (document.visibilityState === "visible") {
         atualizarSilenciosamente();
       }
@@ -293,12 +282,7 @@ export default function ViagensPage() {
     window.addEventListener("focus", atualizarSilenciosamente);
     document.addEventListener(
       "visibilitychange",
-      atualizarAoVoltarParaPagina
-    );
-
-    const atualizacaoAutomatica = window.setInterval(
-      atualizarSilenciosamente,
-      15000
+      atualizarAoVoltar
     );
 
     void iniciar();
@@ -314,10 +298,9 @@ export default function ViagensPage() {
 
       document.removeEventListener(
         "visibilitychange",
-        atualizarAoVoltarParaPagina
+        atualizarAoVoltar
       );
 
-      window.clearInterval(atualizacaoAutomatica);
       void supabase.removeChannel(canal);
     };
   }, [carregarDados, router]);
@@ -333,11 +316,7 @@ export default function ViagensPage() {
   function abrirFinalizacao(viagem: Viagem) {
     setFinalizando(viagem);
 
-    setKmFinal(
-      viagem.km_inicial !== null
-        ? String(viagem.km_inicial)
-        : ""
-    );
+    setKmFinal("");
 
     setObservacaoFinal("");
     setMensagem("");
@@ -358,17 +337,71 @@ export default function ViagensPage() {
     setSalvando(true);
     setMensagem("");
 
-    const kmFinalNumero = kmFinal
-      ? Number(kmFinal)
-      : null;
+    if (!kmFinal.trim()) {
+      setMensagem(
+        "Informe a quilometragem final para concluir a viagem."
+      );
+      setSalvando(false);
+      return;
+    }
+
+    const kmFinalNumero = Number(kmFinal);
 
     if (
-      kmFinalNumero !== null &&
-      finalizando.km_inicial !== null &&
-      kmFinalNumero < finalizando.km_inicial
+      !Number.isFinite(kmFinalNumero) ||
+      kmFinalNumero < 0
     ) {
       setMensagem(
-        "A quilometragem final não pode ser menor que a inicial."
+        "Informe uma quilometragem final válida."
+      );
+      setSalvando(false);
+      return;
+    }
+
+    const {
+      data: viagemAtual,
+      error: erroConsulta,
+    } = await supabase
+      .from("viagens")
+      .select("*")
+      .eq("id", finalizando.id)
+      .single();
+
+    if (erroConsulta || !viagemAtual) {
+      setMensagem(
+        `Não foi possível atualizar a viagem antes de finalizar: ${
+          erroConsulta?.message ?? "registro não encontrado"
+        }`
+      );
+      setSalvando(false);
+      return;
+    }
+
+    if (viagemAtual.status !== "Em viagem") {
+      setMensagem(
+        "Esta viagem já foi finalizada ou cancelada em outro aparelho."
+      );
+      setFinalizando(null);
+      await carregarDados(true);
+      setSalvando(false);
+      return;
+    }
+
+    if (viagemAtual.km_inicial === null) {
+      setMensagem(
+        "Esta viagem foi iniciada sem KM inicial. Cancele este registro e inicie uma nova viagem com a quilometragem obrigatória."
+      );
+      setSalvando(false);
+      return;
+    }
+
+    const kmInicialAtual = Number(viagemAtual.km_inicial);
+
+    if (kmFinalNumero < kmInicialAtual) {
+      setMensagem(
+        `A quilometragem final não pode ser menor que a inicial (${kmInicialAtual.toLocaleString(
+          "pt-BR"
+        )} km).`
       );
       setSalvando(false);
       return;
@@ -383,7 +416,8 @@ export default function ViagensPage() {
         observacao_final:
           observacaoFinal.trim() || null,
       })
-      .eq("id", finalizando.id);
+      .eq("id", finalizando.id)
+      .eq("status", "Em viagem");
 
     if (error) {
       setMensagem(
@@ -393,13 +427,17 @@ export default function ViagensPage() {
       return;
     }
 
-    const viagemFinalizada = finalizando;
+    const viagemFinalizada = {
+      ...finalizando,
+      ...viagemAtual,
+    } as Viagem;
 
     setFinalizando(null);
     setKmFinal("");
     setObservacaoFinal("");
 
     await carregarDados(true);
+    setAgora(new Date());
 
     setMensagem(
       mensagemFinalizacao(viagemFinalizada)
@@ -780,9 +818,11 @@ export default function ViagensPage() {
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               <Campo titulo="Quilometragem final">
                 <input
+                  required
                   type="number"
                   min={finalizando.km_inicial ?? 0}
                   step="0.1"
+                  inputMode="decimal"
                   value={kmFinal}
                   onChange={(evento) =>
                     setKmFinal(evento.target.value)
@@ -808,6 +848,7 @@ export default function ViagensPage() {
             </div>
 
             <button
+              type="submit"
               disabled={salvando}
               className="mt-5 w-full rounded-xl bg-green-600 px-5 py-4 font-bold text-white sm:w-auto sm:py-3"
             >
