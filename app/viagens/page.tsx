@@ -1400,6 +1400,20 @@ function calcularQuilometragemTotal(
   }, 0);
 }
 
+function mensagemFinalizacao(viagem: Viagem) {
+  if (viagem.tipo_viagem === "Carregado") {
+    return "Viagem carregada finalizada. O caminhão foi descarregado.";
+  }
+
+  if (viagem.tipo_viagem === "Vazio") {
+    return "Deslocamento vazio finalizado. O caminhão chegou ao carregamento.";
+  }
+
+  return `Deslocamento interno finalizado: ${
+    viagem.motivo_deslocamento ?? "Outro"
+  }.`;
+}
+
 function classeBordaTipo(tipo: TipoViagem) {
   if (tipo === "Carregado") {
     return "border-red-200";
