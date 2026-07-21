@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { supabase } from "@/lib/supabase";
+import MobileNav from "@/components/MobileNav";
 
 type StatusViagem =
   | "Em viagem"
@@ -679,11 +680,11 @@ export default function ViagensPage() {
   );
 
   return (
-    <main className="min-h-screen bg-slate-100 p-8 text-slate-900">
+    <main className="min-h-screen bg-slate-100 px-4 py-5 pb-28 text-slate-900 sm:p-6 sm:pb-28 md:p-8 md:pb-8">
       <div className="mx-auto max-w-7xl">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold">
+            <h1 className="text-3xl font-bold leading-tight sm:text-4xl">
               Viagens e deslocamentos
             </h1>
 
@@ -693,30 +694,30 @@ export default function ViagensPage() {
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-3">
+          <div className="grid w-full gap-3 sm:flex sm:w-auto sm:flex-wrap">
             <Link
   href="/viagens/indicadores"
-  className="rounded-xl border border-blue-200 bg-blue-50 px-5 py-3 font-semibold text-blue-700"
+  className="w-full rounded-xl border border-blue-200 bg-blue-50 px-5 py-3 text-center font-semibold text-blue-700 sm:w-auto"
 >
   📊 Indicadores detalhados
 </Link>
             <Link
               href="/"
-              className="rounded-xl border bg-white px-5 py-3 font-semibold"
+              className="w-full rounded-xl border bg-white px-5 py-3 text-center font-semibold sm:w-auto"
             >
               Voltar ao Dashboard
             </Link>
 
             <button
               onClick={abrirNovaViagem}
-              className="rounded-xl bg-amber-400 px-5 py-3 font-semibold"
+              className="w-full rounded-xl bg-amber-400 px-5 py-4 text-center font-bold sm:w-auto sm:py-3"
             >
               + Iniciar deslocamento
             </button>
           </div>
         </header>
 
-        <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+        <section className="mt-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-8">
           <CardResumo
             titulo="Total"
             valor={viagens.length}
@@ -779,7 +780,7 @@ export default function ViagensPage() {
         {mostrarFormulario && (
           <form
             onSubmit={iniciarViagem}
-            className="mt-6 rounded-2xl border bg-white p-6 shadow-sm"
+            className="mt-6 rounded-2xl border bg-white p-4 shadow-sm sm:p-6"
           >
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -1053,7 +1054,7 @@ export default function ViagensPage() {
 
             <button
               disabled={salvando}
-              className={`mt-6 rounded-xl px-5 py-3 font-semibold text-white disabled:opacity-60 ${classeBotaoTipo(
+              className={`mt-6 w-full rounded-xl px-5 py-4 font-bold text-white disabled:opacity-60 sm:w-auto sm:py-3 ${classeBotaoTipo(
                 formulario.tipo_viagem
               )}`}
             >
@@ -1069,7 +1070,7 @@ export default function ViagensPage() {
         {finalizando && (
           <form
             onSubmit={finalizarViagem}
-            className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-6 shadow-sm"
+            className="mt-6 rounded-2xl border border-green-200 bg-green-50 p-4 shadow-sm sm:p-6"
           >
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -1131,7 +1132,7 @@ export default function ViagensPage() {
 
             <button
               disabled={salvando}
-              className="mt-5 rounded-xl bg-green-600 px-5 py-3 font-semibold text-white"
+              className="mt-5 w-full rounded-xl bg-green-600 px-5 py-4 font-bold text-white sm:w-auto sm:py-3"
             >
               ✅ Confirmar finalização
             </button>
@@ -1165,7 +1166,7 @@ export default function ViagensPage() {
                 return (
                   <article
                     key={viagem.id}
-                    className={`rounded-2xl border bg-white p-6 shadow-sm ${classeBordaTipo(
+                    className={`rounded-2xl border bg-white p-4 shadow-sm sm:p-6 ${classeBordaTipo(
                       viagem.tipo_viagem
                     )}`}
                   >
@@ -1189,7 +1190,7 @@ export default function ViagensPage() {
                         </p>
                       </div>
 
-                      <div className="rounded-xl bg-slate-950 px-4 py-3 text-center text-white">
+                      <div className="w-full rounded-xl bg-slate-950 px-4 py-3 text-center text-white sm:w-auto">
                         <p className="text-xs text-slate-300">
                           Tempo em deslocamento
                         </p>
@@ -1249,12 +1250,12 @@ export default function ViagensPage() {
                       </div>
                     )}
 
-                    <div className="mt-5 flex flex-wrap gap-2">
+                    <div className="mt-5 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
                       <button
                         onClick={() =>
                           abrirFinalizacao(viagem)
                         }
-                        className="rounded-lg bg-green-600 px-4 py-2 font-semibold text-white"
+                        className="rounded-xl bg-green-600 px-4 py-3 font-bold text-white"
                       >
                         ✅ Finalizar
                       </button>
@@ -1263,7 +1264,7 @@ export default function ViagensPage() {
                         onClick={() =>
                           cancelarViagem(viagem)
                         }
-                        className="rounded-lg bg-slate-700 px-4 py-2 font-semibold text-white"
+                        className="rounded-xl bg-slate-700 px-4 py-3 font-bold text-white"
                       >
                         Cancelar
                       </button>
@@ -1276,7 +1277,7 @@ export default function ViagensPage() {
         </section>
 
         <section className="mt-8 grid gap-6 xl:grid-cols-2">
-          <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border bg-white p-4 shadow-sm sm:p-6">
             <h2 className="text-xl font-bold">
               Resumo de deslocamentos internos
             </h2>
@@ -1312,7 +1313,7 @@ export default function ViagensPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border bg-white p-4 shadow-sm sm:p-6">
             <h2 className="text-xl font-bold">
               Indicadores operacionais
             </h2>
@@ -1371,14 +1372,14 @@ export default function ViagensPage() {
                 </p>
               </div>
 
-              <div className="flex flex-wrap gap-3">
+              <div className="grid w-full gap-3 sm:flex sm:w-auto sm:flex-wrap">
                 <input
                   value={busca}
                   onChange={(evento) =>
                     setBusca(evento.target.value)
                   }
                   placeholder="Buscar rota, cliente ou motivo..."
-                  className="rounded-xl border px-4 py-3"
+                  className="w-full rounded-xl border px-4 py-3 sm:w-auto"
                 />
 
                 <select
@@ -1393,7 +1394,7 @@ export default function ViagensPage() {
                       setFiltroMotivo("");
                     }
                   }}
-                  className="rounded-xl border px-4 py-3"
+                  className="w-full rounded-xl border px-4 py-3 sm:w-auto"
                 >
                   <option value="">
                     Todos os tipos
@@ -1421,7 +1422,7 @@ export default function ViagensPage() {
                         evento.target.value
                       )
                     }
-                    className="rounded-xl border px-4 py-3"
+                    className="w-full rounded-xl border px-4 py-3 sm:w-auto"
                   >
                     <option value="">
                       Todos os motivos
@@ -1445,7 +1446,7 @@ export default function ViagensPage() {
                   onChange={(evento) =>
                     setFiltroStatus(evento.target.value)
                   }
-                  className="rounded-xl border px-4 py-3"
+                  className="w-full rounded-xl border px-4 py-3 sm:w-auto"
                 >
                   <option value="">
                     Todos os status
@@ -1471,7 +1472,7 @@ export default function ViagensPage() {
                       evento.target.value
                     )
                   }
-                  className="rounded-xl border px-4 py-3"
+                  className="w-full rounded-xl border px-4 py-3 sm:w-auto"
                 >
                   <option value="">
                     Todos os motoristas
@@ -1494,7 +1495,7 @@ export default function ViagensPage() {
                       evento.target.value
                     )
                   }
-                  className="rounded-xl border px-4 py-3"
+                  className="w-full rounded-xl border px-4 py-3 sm:w-auto"
                 >
                   <option value="">
                     Todos os caminhões
@@ -1522,8 +1523,100 @@ export default function ViagensPage() {
               Nenhum registro encontrado.
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
+            <>
+              <div className="space-y-3 p-4 md:hidden">
+                {viagensFiltradas.map((viagem) => {
+                  const veiculo = obterVeiculo(viagem.veiculo_id);
+
+                  return (
+                    <article
+                      key={viagem.id}
+                      className="rounded-2xl border bg-slate-50 p-4"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-semibold ${classeEtiquetaTipo(
+                            viagem.tipo_viagem
+                          )}`}
+                        >
+                          {nomeCurtoTipo(viagem.tipo_viagem)}
+                        </span>
+
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-semibold ${classeStatus(
+                            viagem.status
+                          )}`}
+                        >
+                          {viagem.status}
+                        </span>
+                      </div>
+
+                      <h3 className="mt-4 text-lg font-bold">
+                        {viagem.local_carregamento} → {viagem.destino}
+                      </h3>
+
+                      <p className="mt-1 text-sm text-slate-500">
+                        {descricaoSecundaria(viagem)}
+                      </p>
+
+                      <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                        <Informacao
+                          titulo="Motorista"
+                          valor={obterNomeMotorista(viagem.motorista_id)}
+                        />
+
+                        <Informacao
+                          titulo="Caminhão"
+                          valor={veiculo?.placa ?? "Não encontrado"}
+                        />
+
+                        <Informacao
+                          titulo="Início"
+                          valor={formatarDataHora(viagem.iniciado_em)}
+                        />
+
+                        <Informacao
+                          titulo="Distância"
+                          valor={calcularDistancia(viagem)}
+                        />
+                      </div>
+
+                      {viagem.motivo_deslocamento && (
+                        <p className="mt-3 rounded-xl bg-white p-3 text-sm text-slate-600">
+                          Motivo: {viagem.motivo_deslocamento}
+                        </p>
+                      )}
+
+                      <div className="mt-4 grid grid-cols-2 gap-2">
+                        {viagem.status === "Em viagem" && (
+                          <button
+                            type="button"
+                            onClick={() => abrirFinalizacao(viagem)}
+                            className="rounded-xl bg-green-600 px-3 py-3 font-bold text-white"
+                          >
+                            Finalizar
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => excluirViagem(viagem)}
+                          className={`rounded-xl bg-red-600 px-3 py-3 font-bold text-white ${
+                            viagem.status !== "Em viagem"
+                              ? "col-span-2"
+                              : ""
+                          }`}
+                        >
+                          Excluir
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+
+              <div className="hidden overflow-x-auto md:block">
+                <table className="w-full text-left">
                 <thead className="bg-slate-50 text-sm text-slate-500">
                   <tr>
                     <th className="px-4 py-4">
@@ -1678,11 +1771,14 @@ export default function ViagensPage() {
                     );
                   })}
                 </tbody>
-              </table>
-            </div>
+                </table>
+              </div>
+            </>
           )}
         </section>
       </div>
+
+      <MobileNav />
     </main>
   );
 }
@@ -2001,18 +2097,18 @@ function CardResumo({
 }) {
   return (
     <div
-      className={`rounded-2xl border p-5 shadow-sm ${
+      className={`min-w-0 rounded-2xl border p-4 shadow-sm sm:p-5 ${
         destaque
           ? "border-red-200 bg-red-50"
           : "bg-white"
       }`}
     >
-      <p className="text-sm text-slate-500">
+      <p className="text-xs text-slate-500 sm:text-sm">
         {titulo}
       </p>
 
       <p
-        className={`mt-2 text-2xl font-bold ${
+        className={`mt-2 break-words text-xl font-bold sm:text-2xl ${
           destaque
             ? "text-red-700"
             : "text-slate-900"
