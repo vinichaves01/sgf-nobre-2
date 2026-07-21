@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   FormEvent,
   ReactNode,
@@ -80,6 +81,8 @@ const motivosDeslocamento: MotivoDeslocamento[] = [
 
 
 export default function ViagensPage() {
+  const router = useRouter();
+
   const [viagens, setViagens] = useState<Viagem[]>([]);
   const [motoristas, setMotoristas] = useState<Motorista[]>([]);
   const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
@@ -92,6 +95,7 @@ export default function ViagensPage() {
   const [observacaoFinal, setObservacaoFinal] =
     useState("");
 
+  const [sessaoPronta, setSessaoPronta] = useState(false);
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [mensagem, setMensagem] = useState("");
@@ -112,6 +116,28 @@ export default function ViagensPage() {
       if (!silencioso) {
         setCarregando(true);
       }
+
+      const {
+        data: { session },
+        error: erroSessao,
+      } = await supabase.auth.getSession();
+
+      if (erroSessao) {
+        setMensagem(
+          `Não foi possível recuperar sua sessão: ${erroSessao.message}`
+        );
+        setCarregando(false);
+        return;
+      }
+
+      if (!session) {
+        setSessaoPronta(false);
+        setCarregando(false);
+        router.replace("/login");
+        return;
+      }
+
+      setSessaoPronta(true);
 
       const [
         resultadoViagens,
@@ -170,18 +196,47 @@ export default function ViagensPage() {
 
       setCarregando(false);
     },
-    []
+    [router]
   );
 
   useEffect(() => {
-    void carregarDados();
+    let ativo = true;
 
     const atualizarSilenciosamente = () => {
-      void carregarDados(true);
+      if (ativo) {
+        void carregarDados(true);
+      }
+    };
+
+    const iniciar = async () => {
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
+
+      if (!ativo) return;
+
+      if (error) {
+        setMensagem(
+          `Não foi possível recuperar sua sessão: ${error.message}`
+        );
+        setCarregando(false);
+        return;
+      }
+
+      if (!session) {
+        setSessaoPronta(false);
+        setCarregando(false);
+        router.replace("/login");
+        return;
+      }
+
+      setSessaoPronta(true);
+      await carregarDados(false);
     };
 
     const canal = supabase
-      .channel("viagens-tempo-real")
+      .channel(`viagens-tempo-real-${Date.now()}`)
       .on(
         "postgres_changes",
         {
@@ -209,16 +264,25 @@ export default function ViagensPage() {
         },
         atualizarSilenciosamente
       )
-      .subscribe((status) => {
-        if (
-          status === "CHANNEL_ERROR" ||
-          status === "TIMED_OUT"
-        ) {
-          setMensagem(
-            "A conexão em tempo real foi interrompida. O sistema continuará tentando atualizar automaticamente."
-          );
-        }
-      });
+      .subscribe();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_evento, session) => {
+      if (!ativo) return;
+
+      if (!session) {
+        setSessaoPronta(false);
+        router.replace("/login");
+        return;
+      }
+
+      setSessaoPronta(true);
+
+      window.setTimeout(() => {
+        atualizarSilenciosamente();
+      }, 0);
+    });
 
     const atualizarAoVoltarParaPagina = () => {
       if (document.visibilityState === "visible") {
@@ -226,24 +290,23 @@ export default function ViagensPage() {
       }
     };
 
-    window.addEventListener(
-      "focus",
-      atualizarSilenciosamente
-    );
-
+    window.addEventListener("focus", atualizarSilenciosamente);
     document.addEventListener(
       "visibilitychange",
       atualizarAoVoltarParaPagina
     );
 
-    // Segurança adicional: atualiza mesmo se o Realtime
-    // estiver temporariamente indisponível.
     const atualizacaoAutomatica = window.setInterval(
       atualizarSilenciosamente,
       15000
     );
 
+    void iniciar();
+
     return () => {
+      ativo = false;
+      subscription.unsubscribe();
+
       window.removeEventListener(
         "focus",
         atualizarSilenciosamente
@@ -257,7 +320,7 @@ export default function ViagensPage() {
       window.clearInterval(atualizacaoAutomatica);
       void supabase.removeChannel(canal);
     };
-  }, [carregarDados]);
+  }, [carregarDados, router]);
 
   useEffect(() => {
     const intervalo = window.setInterval(() => {
@@ -561,6 +624,26 @@ export default function ViagensPage() {
       };
     }
   );
+
+  if (!sessaoPronta) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-6 text-slate-900">
+        <div className="w-full max-w-md rounded-2xl border bg-white p-6 text-center shadow-sm">
+          <div className="text-2xl font-bold text-amber-500">
+            NOBRE
+          </div>
+
+          <p className="mt-4 font-semibold">
+            Restaurando sua sessão...
+          </p>
+
+          <p className="mt-2 text-sm text-slate-500">
+            As viagens serão exibidas assim que seu acesso for confirmado.
+          </p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-5 pb-28 text-slate-900 sm:p-6 sm:pb-28 md:p-8 md:pb-8">

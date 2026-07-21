@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, ReactNode, useEffect, useState } from "react";
+import { FormEvent, ReactNode, useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import MobileNav from "@/components/MobileNav";
@@ -76,14 +76,38 @@ export default function NovaViagemPage() {
   >([]);
 
   const [formulario, setFormulario] = useState(formularioInicial);
+  const [sessaoPronta, setSessaoPronta] = useState(false);
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [mensagem, setMensagem] = useState("");
 
-  useEffect(() => {
-    async function carregarDados() {
-      setCarregando(true);
-      setMensagem("");
+  const carregarDados = useCallback(
+    async (silencioso = false) => {
+      if (!silencioso) {
+        setCarregando(true);
+      }
+
+      const {
+        data: { session },
+        error: erroSessao,
+      } = await supabase.auth.getSession();
+
+      if (erroSessao) {
+        setMensagem(
+          `Não foi possível recuperar sua sessão: ${erroSessao.message}`
+        );
+        setCarregando(false);
+        return;
+      }
+
+      if (!session) {
+        setSessaoPronta(false);
+        setCarregando(false);
+        router.replace("/login");
+        return;
+      }
+
+      setSessaoPronta(true);
 
       const [resultadoMotoristas, resultadoVeiculos, resultadoViagens] =
         await Promise.all([
@@ -103,38 +127,149 @@ export default function NovaViagemPage() {
             .eq("status", "Em viagem"),
         ]);
 
+      const erros: string[] = [];
+
       if (resultadoMotoristas.error) {
-        setMensagem(
-          `Erro ao carregar motoristas: ${resultadoMotoristas.error.message}`
+        erros.push(
+          `Motoristas: ${resultadoMotoristas.error.message}`
         );
-        setMotoristas([]);
       } else {
         setMotoristas(resultadoMotoristas.data ?? []);
       }
 
       if (resultadoVeiculos.error) {
-        setMensagem(
-          `Erro ao carregar veículos: ${resultadoVeiculos.error.message}`
+        erros.push(
+          `Veículos: ${resultadoVeiculos.error.message}`
         );
-        setVeiculos([]);
       } else {
         setVeiculos(resultadoVeiculos.data ?? []);
       }
 
       if (resultadoViagens.error) {
-        setMensagem(
-          `Erro ao verificar operações em andamento: ${resultadoViagens.error.message}`
+        erros.push(
+          `Operações em andamento: ${resultadoViagens.error.message}`
         );
-        setViagensEmAndamento([]);
       } else {
         setViagensEmAndamento(resultadoViagens.data ?? []);
       }
 
-      setCarregando(false);
-    }
+      if (erros.length > 0) {
+        setMensagem(
+          `Alguns dados não puderam ser carregados — ${erros.join(" | ")}`
+        );
+      } else {
+        setMensagem("");
+      }
 
-    carregarDados();
-  }, []);
+      setCarregando(false);
+    },
+    [router]
+  );
+
+  useEffect(() => {
+    let ativo = true;
+
+    const atualizarSilenciosamente = () => {
+      if (ativo) {
+        void carregarDados(true);
+      }
+    };
+
+    const iniciar = async () => {
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
+
+      if (!ativo) return;
+
+      if (error) {
+        setMensagem(
+          `Não foi possível recuperar sua sessão: ${error.message}`
+        );
+        setCarregando(false);
+        return;
+      }
+
+      if (!session) {
+        setSessaoPronta(false);
+        setCarregando(false);
+        router.replace("/login");
+        return;
+      }
+
+      setSessaoPronta(true);
+      await carregarDados(false);
+    };
+
+    const canal = supabase
+      .channel(`nova-viagem-tempo-real-${Date.now()}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "viagens",
+        },
+        atualizarSilenciosamente
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "motoristas",
+        },
+        atualizarSilenciosamente
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "veiculos",
+        },
+        atualizarSilenciosamente
+      )
+      .subscribe();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_evento, session) => {
+      if (!ativo) return;
+
+      if (!session) {
+        setSessaoPronta(false);
+        router.replace("/login");
+        return;
+      }
+
+      setSessaoPronta(true);
+
+      window.setTimeout(() => {
+        atualizarSilenciosamente();
+      }, 0);
+    });
+
+    const atualizarAoVoltar = () => {
+      if (document.visibilityState === "visible") {
+        atualizarSilenciosamente();
+      }
+    };
+
+    window.addEventListener("focus", atualizarSilenciosamente);
+    document.addEventListener("visibilitychange", atualizarAoVoltar);
+
+    void iniciar();
+
+    return () => {
+      ativo = false;
+      subscription.unsubscribe();
+      window.removeEventListener("focus", atualizarSilenciosamente);
+      document.removeEventListener("visibilitychange", atualizarAoVoltar);
+      void supabase.removeChannel(canal);
+    };
+  }, [carregarDados, router]);
 
   function alterarTipoViagem(tipo: TipoViagem) {
     setFormulario((atual) => ({
@@ -293,6 +428,26 @@ export default function NovaViagemPage() {
     (motorista) => motorista.id === formulario.motorista_id
   );
 
+  if (!sessaoPronta) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-6 text-slate-900">
+        <div className="w-full max-w-md rounded-2xl border bg-white p-6 text-center shadow-sm">
+          <div className="text-2xl font-bold text-amber-500">
+            NOBRE
+          </div>
+
+          <p className="mt-4 font-semibold">
+            Restaurando sua sessão...
+          </p>
+
+          <p className="mt-2 text-sm text-slate-500">
+            Motoristas e caminhões serão carregados assim que seu acesso for confirmado.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-5 pb-28 text-slate-900 sm:p-6 sm:pb-28 md:p-8 md:pb-8">
       <div className="mx-auto max-w-4xl">
@@ -406,7 +561,9 @@ export default function NovaViagemPage() {
                   className="w-full rounded-xl border px-4 py-3"
                 >
                   <option value="">
-                    Selecione o motorista
+                    {motoristasDisponiveis.length > 0
+                      ? "Selecione o motorista"
+                      : "Nenhum motorista disponível"}
                   </option>
 
                   {motoristasDisponiveis.map((motorista) => (
@@ -439,7 +596,9 @@ export default function NovaViagemPage() {
                   className="w-full rounded-xl border px-4 py-3 disabled:bg-slate-100"
                 >
                   <option value="">
-                    Selecione o caminhão
+                    {veiculosDisponiveis.length > 0
+                      ? "Selecione o caminhão"
+                      : "Nenhum caminhão disponível"}
                   </option>
 
                   {veiculosDisponiveis.map((veiculo) => (
@@ -549,6 +708,18 @@ export default function NovaViagemPage() {
                 formulario.motivo_deslocamento || null
               }
             />
+
+            {motoristasDisponiveis.length === 0 && (
+              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                Nenhum motorista está disponível. Verifique se os motoristas estão ativos e se não existe outra operação em andamento.
+              </div>
+            )}
+
+            {veiculosDisponiveis.length === 0 && (
+              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                Nenhum caminhão está disponível. Verifique se os veículos estão ativos e se não existe outra operação em andamento.
+              </div>
+            )}
 
             {motoristaSelecionado?.tipo_motorista ===
               "Folguista" && (
