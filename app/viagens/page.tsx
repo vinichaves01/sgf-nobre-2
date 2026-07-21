@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   FormEvent,
   ReactNode,
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -77,28 +78,12 @@ const motivosDeslocamento: MotivoDeslocamento[] = [
   "Outro",
 ];
 
-const formularioInicial = {
-  motorista_id: "",
-  veiculo_id: "",
-  tipo_viagem: "Carregado" as TipoViagem,
-  motivo_deslocamento: "" as MotivoDeslocamento | "",
-  local_carregamento: "",
-  destino: "",
-  cliente: "",
-  km_inicial: "",
-  observacao_inicio: "",
-};
 
 export default function ViagensPage() {
   const [viagens, setViagens] = useState<Viagem[]>([]);
   const [motoristas, setMotoristas] = useState<Motorista[]>([]);
   const [veiculos, setVeiculos] = useState<Veiculo[]>([]);
 
-  const [formulario, setFormulario] =
-    useState(formularioInicial);
-
-  const [mostrarFormulario, setMostrarFormulario] =
-    useState(false);
 
   const [finalizando, setFinalizando] =
     useState<Viagem | null>(null);
@@ -122,65 +107,157 @@ export default function ViagensPage() {
 
   const [agora, setAgora] = useState(new Date());
 
-  async function carregarDados() {
-    setCarregando(true);
+  const carregarDados = useCallback(
+    async (silencioso = false) => {
+      if (!silencioso) {
+        setCarregando(true);
+      }
 
-    const [
-      resultadoViagens,
-      resultadoMotoristas,
-      resultadoVeiculos,
-    ] = await Promise.all([
-      supabase
-        .from("viagens")
-        .select("*")
-        .order("iniciado_em", { ascending: false }),
+      const [
+        resultadoViagens,
+        resultadoMotoristas,
+        resultadoVeiculos,
+      ] = await Promise.all([
+        supabase
+          .from("viagens")
+          .select("*")
+          .order("iniciado_em", { ascending: false }),
 
-      supabase
-        .from("motoristas")
-        .select(
-          "id, nome, tipo_motorista, veiculo_id, status"
-        )
-        .order("nome", { ascending: true }),
+        supabase
+          .from("motoristas")
+          .select(
+            "id, nome, tipo_motorista, veiculo_id, status"
+          )
+          .order("nome", { ascending: true }),
 
-      supabase
-        .from("veiculos")
-        .select("id, placa, marca, modelo, status")
-        .order("placa", { ascending: true }),
-    ]);
+        supabase
+          .from("veiculos")
+          .select("id, placa, marca, modelo, status")
+          .order("placa", { ascending: true }),
+      ]);
 
-    if (resultadoViagens.error) {
-      setMensagem(
-        `Erro ao carregar viagens: ${resultadoViagens.error.message}`
-      );
-      setViagens([]);
-    } else {
-      setViagens(resultadoViagens.data ?? []);
-    }
+      const erros: string[] = [];
 
-    if (resultadoMotoristas.error) {
-      setMensagem(
-        `Erro ao carregar motoristas: ${resultadoMotoristas.error.message}`
-      );
-      setMotoristas([]);
-    } else {
-      setMotoristas(resultadoMotoristas.data ?? []);
-    }
+      if (resultadoViagens.error) {
+        erros.push(
+          `Viagens: ${resultadoViagens.error.message}`
+        );
+      } else {
+        setViagens(resultadoViagens.data ?? []);
+      }
 
-    if (resultadoVeiculos.error) {
-      setMensagem(
-        `Erro ao carregar veículos: ${resultadoVeiculos.error.message}`
-      );
-      setVeiculos([]);
-    } else {
-      setVeiculos(resultadoVeiculos.data ?? []);
-    }
+      if (resultadoMotoristas.error) {
+        erros.push(
+          `Motoristas: ${resultadoMotoristas.error.message}`
+        );
+      } else {
+        setMotoristas(resultadoMotoristas.data ?? []);
+      }
 
-    setCarregando(false);
-  }
+      if (resultadoVeiculos.error) {
+        erros.push(
+          `Veículos: ${resultadoVeiculos.error.message}`
+        );
+      } else {
+        setVeiculos(resultadoVeiculos.data ?? []);
+      }
+
+      if (erros.length > 0) {
+        setMensagem(
+          `Erro ao atualizar os dados — ${erros.join(" | ")}`
+        );
+      }
+
+      setCarregando(false);
+    },
+    []
+  );
 
   useEffect(() => {
-    carregarDados();
-  }, []);
+    void carregarDados();
+
+    const atualizarSilenciosamente = () => {
+      void carregarDados(true);
+    };
+
+    const canal = supabase
+      .channel("viagens-tempo-real")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "viagens",
+        },
+        atualizarSilenciosamente
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "motoristas",
+        },
+        atualizarSilenciosamente
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "veiculos",
+        },
+        atualizarSilenciosamente
+      )
+      .subscribe((status) => {
+        if (
+          status === "CHANNEL_ERROR" ||
+          status === "TIMED_OUT"
+        ) {
+          setMensagem(
+            "A conexão em tempo real foi interrompida. O sistema continuará tentando atualizar automaticamente."
+          );
+        }
+      });
+
+    const atualizarAoVoltarParaPagina = () => {
+      if (document.visibilityState === "visible") {
+        atualizarSilenciosamente();
+      }
+    };
+
+    window.addEventListener(
+      "focus",
+      atualizarSilenciosamente
+    );
+
+    document.addEventListener(
+      "visibilitychange",
+      atualizarAoVoltarParaPagina
+    );
+
+    // Segurança adicional: atualiza mesmo se o Realtime
+    // estiver temporariamente indisponível.
+    const atualizacaoAutomatica = window.setInterval(
+      atualizarSilenciosamente,
+      15000
+    );
+
+    return () => {
+      window.removeEventListener(
+        "focus",
+        atualizarSilenciosamente
+      );
+
+      document.removeEventListener(
+        "visibilitychange",
+        atualizarAoVoltarParaPagina
+      );
+
+      window.clearInterval(atualizacaoAutomatica);
+      void supabase.removeChannel(canal);
+    };
+  }, [carregarDados]);
 
   useEffect(() => {
     const intervalo = window.setInterval(() => {
@@ -189,170 +266,6 @@ export default function ViagensPage() {
 
     return () => window.clearInterval(intervalo);
   }, []);
-
-  function abrirNovaViagem() {
-    setFormulario(formularioInicial);
-    setMensagem("");
-    setMostrarFormulario(true);
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
-  }
-
-  function fecharFormulario() {
-    setMostrarFormulario(false);
-    setFormulario(formularioInicial);
-  }
-
-  function alterarTipoViagem(tipo: TipoViagem) {
-    setFormulario({
-      ...formulario,
-      tipo_viagem: tipo,
-      cliente:
-        tipo === "Carregado"
-          ? formulario.cliente
-          : "",
-      motivo_deslocamento:
-        tipo === "Deslocamento interno"
-          ? formulario.motivo_deslocamento
-          : "",
-    });
-  }
-
-  function alterarMotorista(motoristaId: string) {
-    const motorista = motoristas.find(
-      (item) => item.id === motoristaId
-    );
-
-    setFormulario({
-      ...formulario,
-      motorista_id: motoristaId,
-      veiculo_id:
-        motorista?.tipo_motorista === "Fixo"
-          ? motorista.veiculo_id ?? ""
-          : "",
-    });
-  }
-
-  async function iniciarViagem(
-    evento: FormEvent<HTMLFormElement>
-  ) {
-    evento.preventDefault();
-
-    setSalvando(true);
-    setMensagem("");
-
-    const motorista = motoristas.find(
-      (item) => item.id === formulario.motorista_id
-    );
-
-    if (!motorista) {
-      setMensagem("Selecione um motorista.");
-      setSalvando(false);
-      return;
-    }
-
-    if (!formulario.veiculo_id) {
-      setMensagem("Selecione o caminhão da viagem.");
-      setSalvando(false);
-      return;
-    }
-
-    if (
-      formulario.tipo_viagem ===
-        "Deslocamento interno" &&
-      !formulario.motivo_deslocamento
-    ) {
-      setMensagem(
-        "Selecione o motivo do deslocamento interno."
-      );
-      setSalvando(false);
-      return;
-    }
-
-    const motoristaOcupado = viagens.some(
-      (viagem) =>
-        viagem.motorista_id === formulario.motorista_id &&
-        viagem.status === "Em viagem"
-    );
-
-    if (motoristaOcupado) {
-      setMensagem(
-        "Este motorista já possui uma viagem em andamento."
-      );
-      setSalvando(false);
-      return;
-    }
-
-    const veiculoOcupado = viagens.some(
-      (viagem) =>
-        viagem.veiculo_id === formulario.veiculo_id &&
-        viagem.status === "Em viagem"
-    );
-
-    if (veiculoOcupado) {
-      setMensagem(
-        "Este caminhão já está sendo utilizado em outra viagem."
-      );
-      setSalvando(false);
-      return;
-    }
-
-    const dados = {
-      motorista_id: formulario.motorista_id,
-      veiculo_id: formulario.veiculo_id,
-      tipo_viagem: formulario.tipo_viagem,
-      motivo_deslocamento:
-        formulario.tipo_viagem ===
-        "Deslocamento interno"
-          ? formulario.motivo_deslocamento
-          : null,
-      local_carregamento:
-        formulario.local_carregamento.trim(),
-      destino: formulario.destino.trim(),
-      cliente:
-        formulario.tipo_viagem === "Carregado"
-          ? formulario.cliente.trim() || null
-          : null,
-      km_inicial: formulario.km_inicial
-        ? Number(formulario.km_inicial)
-        : null,
-      observacao_inicio:
-        formulario.observacao_inicio.trim() || null,
-      status: "Em viagem" as StatusViagem,
-      iniciado_em: new Date().toISOString(),
-    };
-
-    const { error } = await supabase
-      .from("viagens")
-      .insert(dados);
-
-    if (error) {
-      if (error.code === "23505") {
-        setMensagem(
-          "O motorista ou o caminhão já possui uma viagem em andamento."
-        );
-      } else {
-        setMensagem(
-          `Erro ao iniciar viagem: ${error.message}`
-        );
-      }
-
-      setSalvando(false);
-      return;
-    }
-
-    fecharFormulario();
-    await carregarDados();
-
-    setMensagem(
-      mensagemInicioViagem(formulario.tipo_viagem)
-    );
-
-    setSalvando(false);
-  }
 
   function abrirFinalizacao(viagem: Viagem) {
     setFinalizando(viagem);
@@ -423,7 +336,7 @@ export default function ViagensPage() {
     setKmFinal("");
     setObservacaoFinal("");
 
-    await carregarDados();
+    await carregarDados(true);
 
     setMensagem(
       mensagemFinalizacao(viagemFinalizada)
@@ -505,36 +418,6 @@ export default function ViagensPage() {
 
   const viagensEmAndamento = viagens.filter(
     (viagem) => viagem.status === "Em viagem"
-  );
-
-  const veiculosOcupados = new Set(
-    viagensEmAndamento.map(
-      (viagem) => viagem.veiculo_id
-    )
-  );
-
-  const motoristasOcupados = new Set(
-    viagensEmAndamento.map(
-      (viagem) => viagem.motorista_id
-    )
-  );
-
-  const motoristasDisponiveis = motoristas.filter(
-    (motorista) =>
-      motorista.status === "Ativo" &&
-      (!motoristasOcupados.has(motorista.id) ||
-        motorista.id === formulario.motorista_id)
-  );
-
-  const veiculosDisponiveis = veiculos.filter(
-    (veiculo) =>
-      !veiculosOcupados.has(veiculo.id) ||
-      veiculo.id === formulario.veiculo_id
-  );
-
-  const motoristaSelecionado = motoristas.find(
-    (motorista) =>
-      motorista.id === formulario.motorista_id
   );
 
   const viagensFiltradas = useMemo(() => {
@@ -696,11 +579,12 @@ export default function ViagensPage() {
 
           <div className="grid w-full gap-3 sm:flex sm:w-auto sm:flex-wrap">
             <Link
-  href="/viagens/indicadores"
-  className="w-full rounded-xl border border-blue-200 bg-blue-50 px-5 py-3 text-center font-semibold text-blue-700 sm:w-auto"
->
-  📊 Indicadores detalhados
-</Link>
+              href="/viagens/indicadores"
+              className="w-full rounded-xl border border-blue-200 bg-blue-50 px-5 py-3 text-center font-semibold text-blue-700 sm:w-auto"
+            >
+              📊 Indicadores detalhados
+            </Link>
+
             <Link
               href="/"
               className="w-full rounded-xl border bg-white px-5 py-3 text-center font-semibold sm:w-auto"
@@ -708,12 +592,12 @@ export default function ViagensPage() {
               Voltar ao Dashboard
             </Link>
 
-            <button
-              onClick={abrirNovaViagem}
+            <Link
+              href="/viagens/nova"
               className="w-full rounded-xl bg-amber-400 px-5 py-4 text-center font-bold sm:w-auto sm:py-3"
             >
               + Iniciar deslocamento
-            </button>
+            </Link>
           </div>
         </header>
 
@@ -775,296 +659,6 @@ export default function ViagensPage() {
           <div className="mt-6 rounded-xl border bg-white px-4 py-3">
             {mensagem}
           </div>
-        )}
-
-        {mostrarFormulario && (
-          <form
-            onSubmit={iniciarViagem}
-            className="mt-6 rounded-2xl border bg-white p-4 shadow-sm sm:p-6"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="text-xl font-bold">
-                  Iniciar deslocamento
-                </h2>
-
-                <p className="mt-1 text-sm text-slate-500">
-                  Selecione a situação operacional do
-                  caminhão.
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={fecharFormulario}
-                className="text-slate-500"
-              >
-                Fechar
-              </button>
-            </div>
-
-            <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <Campo titulo="Tipo de deslocamento">
-                <select
-                  value={formulario.tipo_viagem}
-                  onChange={(evento) =>
-                    alterarTipoViagem(
-                      evento.target.value as TipoViagem
-                    )
-                  }
-                  className="w-full rounded-xl border px-4 py-3"
-                >
-                  <option value="Carregado">
-                    🔴 Carregado — indo descarregar
-                  </option>
-
-                  <option value="Vazio">
-                    🟠 Vazio — indo carregar
-                  </option>
-
-                  <option value="Deslocamento interno">
-                    🔵 Fora de operação / deslocamento interno
-                  </option>
-                </select>
-              </Campo>
-
-              {formulario.tipo_viagem ===
-                "Deslocamento interno" && (
-                <Campo titulo="Motivo obrigatório">
-                  <select
-                    required
-                    value={
-                      formulario.motivo_deslocamento
-                    }
-                    onChange={(evento) =>
-                      setFormulario({
-                        ...formulario,
-                        motivo_deslocamento:
-                          evento.target
-                            .value as MotivoDeslocamento,
-                      })
-                    }
-                    className="w-full rounded-xl border px-4 py-3"
-                  >
-                    <option value="">
-                      Selecione o motivo
-                    </option>
-
-                    {motivosDeslocamento.map(
-                      (motivo) => (
-                        <option
-                          key={motivo}
-                          value={motivo}
-                        >
-                          {motivo}
-                        </option>
-                      )
-                    )}
-                  </select>
-                </Campo>
-              )}
-
-              <Campo titulo="Motorista">
-                <select
-                  required
-                  value={formulario.motorista_id}
-                  onChange={(evento) =>
-                    alterarMotorista(evento.target.value)
-                  }
-                  className="w-full rounded-xl border px-4 py-3"
-                >
-                  <option value="">
-                    Selecione o motorista
-                  </option>
-
-                  {motoristasDisponiveis.map(
-                    (motorista) => (
-                      <option
-                        key={motorista.id}
-                        value={motorista.id}
-                      >
-                        {motorista.nome} —{" "}
-                        {motorista.tipo_motorista}
-                      </option>
-                    )
-                  )}
-                </select>
-              </Campo>
-
-              <Campo titulo="Caminhão">
-                <select
-                  required
-                  disabled={
-                    !formulario.motorista_id ||
-                    motoristaSelecionado?.tipo_motorista ===
-                      "Fixo"
-                  }
-                  value={formulario.veiculo_id}
-                  onChange={(evento) =>
-                    setFormulario({
-                      ...formulario,
-                      veiculo_id:
-                        evento.target.value,
-                    })
-                  }
-                  className="w-full rounded-xl border px-4 py-3 disabled:bg-slate-100"
-                >
-                  <option value="">
-                    Selecione o caminhão
-                  </option>
-
-                  {veiculosDisponiveis.map((veiculo) => (
-                    <option
-                      key={veiculo.id}
-                      value={veiculo.id}
-                    >
-                      {veiculo.placa} — {veiculo.marca}{" "}
-                      {veiculo.modelo}
-                    </option>
-                  ))}
-                </select>
-              </Campo>
-
-              {formulario.tipo_viagem === "Carregado" && (
-                <Campo titulo="Cliente">
-                  <input
-                    value={formulario.cliente}
-                    onChange={(evento) =>
-                      setFormulario({
-                        ...formulario,
-                        cliente: evento.target.value,
-                      })
-                    }
-                    placeholder="Nome do cliente"
-                    className="w-full rounded-xl border px-4 py-3"
-                  />
-                </Campo>
-              )}
-
-              <Campo
-                titulo={tituloOrigem(
-                  formulario.tipo_viagem
-                )}
-              >
-                <input
-                  required
-                  value={
-                    formulario.local_carregamento
-                  }
-                  onChange={(evento) =>
-                    setFormulario({
-                      ...formulario,
-                      local_carregamento:
-                        evento.target.value,
-                    })
-                  }
-                  placeholder={placeholderOrigem(
-                    formulario.tipo_viagem
-                  )}
-                  className="w-full rounded-xl border px-4 py-3"
-                />
-              </Campo>
-
-              <Campo
-                titulo={tituloDestino(
-                  formulario.tipo_viagem
-                )}
-              >
-                <input
-                  required
-                  value={formulario.destino}
-                  onChange={(evento) =>
-                    setFormulario({
-                      ...formulario,
-                      destino:
-                        evento.target.value,
-                    })
-                  }
-                  placeholder={placeholderDestino(
-                    formulario.tipo_viagem,
-                    formulario.motivo_deslocamento
-                  )}
-                  className="w-full rounded-xl border px-4 py-3"
-                />
-              </Campo>
-
-              <Campo titulo="Quilometragem inicial">
-                <input
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  value={formulario.km_inicial}
-                  onChange={(evento) =>
-                    setFormulario({
-                      ...formulario,
-                      km_inicial:
-                        evento.target.value,
-                    })
-                  }
-                  placeholder="KM atual do painel"
-                  className="w-full rounded-xl border px-4 py-3"
-                />
-              </Campo>
-
-              <div className="md:col-span-2 xl:col-span-3">
-                <Campo titulo="Observação inicial">
-                  <textarea
-                    rows={3}
-                    value={
-                      formulario.observacao_inicio
-                    }
-                    onChange={(evento) =>
-                      setFormulario({
-                        ...formulario,
-                        observacao_inicio:
-                          evento.target.value,
-                      })
-                    }
-                    placeholder="Carga, documento, manutenção, ocorrência ou informação importante..."
-                    className="w-full rounded-xl border px-4 py-3"
-                  />
-                </Campo>
-              </div>
-            </div>
-
-            <AvisoTipo
-              tipo={formulario.tipo_viagem}
-              motivo={
-                formulario.motivo_deslocamento ||
-                null
-              }
-            />
-
-            {motoristaSelecionado?.tipo_motorista ===
-              "Folguista" && (
-              <div className="mt-4 rounded-xl border border-purple-200 bg-purple-50 p-4 text-sm text-purple-800">
-                Este motorista é folguista. Selecione o
-                caminhão disponível utilizado neste
-                deslocamento.
-              </div>
-            )}
-
-            {motoristaSelecionado?.tipo_motorista ===
-              "Fixo" && (
-              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-                O caminhão fixo do motorista foi selecionado
-                automaticamente.
-              </div>
-            )}
-
-            <button
-              disabled={salvando}
-              className={`mt-6 w-full rounded-xl px-5 py-4 font-bold text-white disabled:opacity-60 sm:w-auto sm:py-3 ${classeBotaoTipo(
-                formulario.tipo_viagem
-              )}`}
-            >
-              {salvando
-                ? "Iniciando..."
-                : textoBotaoInicio(
-                    formulario.tipo_viagem
-                  )}
-            </button>
-          </form>
         )}
 
         {finalizando && (
@@ -1252,6 +846,7 @@ export default function ViagensPage() {
 
                     <div className="mt-5 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
                       <button
+                        type="button"
                         onClick={() =>
                           abrirFinalizacao(viagem)
                         }
@@ -1261,6 +856,7 @@ export default function ViagensPage() {
                       </button>
 
                       <button
+                        type="button"
                         onClick={() =>
                           cancelarViagem(viagem)
                         }
@@ -1746,6 +1342,7 @@ export default function ViagensPage() {
                             {viagem.status ===
                               "Em viagem" && (
                               <button
+                                type="button"
                                 onClick={() =>
                                   abrirFinalizacao(
                                     viagem
@@ -1758,6 +1355,7 @@ export default function ViagensPage() {
                             )}
 
                             <button
+                              type="button"
                               onClick={() =>
                                 excluirViagem(viagem)
                               }
@@ -1800,148 +1398,6 @@ function calcularQuilometragemTotal(
         Number(viagem.km_inicial))
     );
   }, 0);
-}
-
-function mensagemInicioViagem(tipo: TipoViagem) {
-  if (tipo === "Carregado") {
-    return "Viagem carregada iniciada com sucesso.";
-  }
-
-  if (tipo === "Vazio") {
-    return "Deslocamento vazio para carregamento iniciado.";
-  }
-
-  return "Deslocamento interno iniciado com sucesso.";
-}
-
-function mensagemFinalizacao(viagem: Viagem) {
-  if (viagem.tipo_viagem === "Carregado") {
-    return "Viagem carregada finalizada. O caminhão foi descarregado.";
-  }
-
-  if (viagem.tipo_viagem === "Vazio") {
-    return "Deslocamento vazio finalizado. O caminhão chegou ao carregamento.";
-  }
-
-  return `Deslocamento interno finalizado: ${
-    viagem.motivo_deslocamento ?? "Outro"
-  }.`;
-}
-
-function tituloOrigem(tipo: TipoViagem) {
-  if (tipo === "Carregado") {
-    return "Local de carregamento";
-  }
-
-  return "Local de saída";
-}
-
-function tituloDestino(tipo: TipoViagem) {
-  if (tipo === "Carregado") {
-    return "Destino de descarga";
-  }
-
-  if (tipo === "Vazio") {
-    return "Destino de carregamento";
-  }
-
-  return "Destino do deslocamento";
-}
-
-function placeholderOrigem(tipo: TipoViagem) {
-  if (tipo === "Carregado") {
-    return "Ex.: Ibiti";
-  }
-
-  if (tipo === "Vazio") {
-    return "Ex.: Puma";
-  }
-
-  return "Ex.: Base da empresa";
-}
-
-function placeholderDestino(
-  tipo: TipoViagem,
-  motivo: MotivoDeslocamento | ""
-) {
-  if (tipo === "Carregado") {
-    return "Ex.: Puma";
-  }
-
-  if (tipo === "Vazio") {
-    return "Ex.: Ibiti";
-  }
-
-  if (motivo === "Manutenção") {
-    return "Ex.: Oficina Mercedes";
-  }
-
-  if (motivo === "Retorno para casa") {
-    return "Ex.: Garagem / residência";
-  }
-
-  if (motivo === "Abastecimento") {
-    return "Ex.: Posto de combustível";
-  }
-
-  return "Informe o destino";
-}
-
-function AvisoTipo({
-  tipo,
-  motivo,
-}: {
-  tipo: TipoViagem;
-  motivo: MotivoDeslocamento | null;
-}) {
-  if (tipo === "Carregado") {
-    return (
-      <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-        🔴 O caminhão está carregado e seguirá até o local
-        de descarga.
-      </div>
-    );
-  }
-
-  if (tipo === "Vazio") {
-    return (
-      <div className="mt-4 rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-800">
-        🟠 O caminhão está vazio e seguirá para buscar uma
-        nova carga.
-      </div>
-    );
-  }
-
-  return (
-    <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
-      🔵 O caminhão está fora da operação de carga
-      {motivo ? ` — ${motivo}.` : "."}
-    </div>
-  );
-}
-
-function textoBotaoInicio(tipo: TipoViagem) {
-  if (tipo === "Carregado") {
-    return "🔴 Começar viagem carregado";
-  }
-
-  if (tipo === "Vazio") {
-    return "🟠 Começar viagem vazio";
-  }
-
-  return "🔵 Iniciar deslocamento interno";
-}
-
-function classeBotaoTipo(tipo: TipoViagem) {
-  if (tipo === "Carregado") {
-    return "bg-red-600";
-  }
-
-  if (tipo === "Vazio") {
-    return "bg-orange-500";
-  }
-
-  return "bg-blue-600";
 }
 
 function classeBordaTipo(tipo: TipoViagem) {
