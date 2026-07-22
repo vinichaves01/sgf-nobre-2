@@ -378,7 +378,6 @@ export default function NovaViagemPage() {
       observacao_inicio:
         formulario.observacao_inicio.trim() || null,
       status: "Em viagem",
-      iniciado_em: new Date().toISOString(),
     };
 
     const { error } = await supabase

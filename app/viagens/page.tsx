@@ -8,6 +8,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { supabase } from "@/lib/supabase";
@@ -110,6 +111,30 @@ export default function ViagensPage() {
     useState("");
 
   const [agora, setAgora] = useState(new Date());
+  const diferencaServidorRef = useRef(0);
+
+  const sincronizarRelogioServidor = useCallback(async () => {
+    const inicioRequisicao = Date.now();
+    const { data, error } = await supabase.rpc("agora_servidor");
+    const fimRequisicao = Date.now();
+
+    if (error || !data) {
+      console.error("Não foi possível sincronizar o relógio do servidor:", error);
+      return;
+    }
+
+    const horarioServidor = new Date(String(data)).getTime();
+    const horarioLocalEstimado = Math.floor(
+      (inicioRequisicao + fimRequisicao) / 2
+    );
+
+    diferencaServidorRef.current =
+      horarioServidor - horarioLocalEstimado;
+
+    setAgora(
+      new Date(Date.now() + diferencaServidorRef.current)
+    );
+  }, []);
 
   const carregarDados = useCallback(
     async (silencioso = false) => {
@@ -185,7 +210,7 @@ export default function ViagensPage() {
     const atualizarSilenciosamente = () => {
       if (!ativo) return;
 
-      setAgora(new Date());
+      void sincronizarRelogioServidor();
       void carregarDados(true);
     };
 
@@ -214,7 +239,7 @@ export default function ViagensPage() {
 
       setSessaoPronta(true);
       await carregarDados(false);
-      setAgora(new Date());
+      await sincronizarRelogioServidor();
     };
 
     const canal = supabase
@@ -303,15 +328,24 @@ export default function ViagensPage() {
 
       void supabase.removeChannel(canal);
     };
-  }, [carregarDados, router]);
+  }, [carregarDados, router, sincronizarRelogioServidor]);
 
   useEffect(() => {
     const intervalo = window.setInterval(() => {
-      setAgora(new Date());
+      setAgora(
+        new Date(Date.now() + diferencaServidorRef.current)
+      );
     }, 1000);
 
-    return () => window.clearInterval(intervalo);
-  }, []);
+    const recalibracao = window.setInterval(() => {
+      void sincronizarRelogioServidor();
+    }, 60000);
+
+    return () => {
+      window.clearInterval(intervalo);
+      window.clearInterval(recalibracao);
+    };
+  }, [sincronizarRelogioServidor]);
 
   function abrirFinalizacao(viagem: Viagem) {
     setFinalizando(viagem);
@@ -412,7 +446,6 @@ export default function ViagensPage() {
       .update({
         status: "Finalizada",
         km_final: kmFinalNumero,
-        finalizado_em: new Date().toISOString(),
         observacao_final:
           observacaoFinal.trim() || null,
       })
@@ -437,7 +470,7 @@ export default function ViagensPage() {
     setObservacaoFinal("");
 
     await carregarDados(true);
-    setAgora(new Date());
+    await sincronizarRelogioServidor();
 
     setMensagem(
       mensagemFinalizacao(viagemFinalizada)
@@ -459,7 +492,6 @@ export default function ViagensPage() {
       .from("viagens")
       .update({
         status: "Cancelada",
-        finalizado_em: new Date().toISOString(),
       })
       .eq("id", viagem.id);
 

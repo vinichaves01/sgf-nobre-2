@@ -36,6 +36,7 @@ const menu = [
   ["🔧", "Manutenção", "/manutencao"],
   ["👥", "Clientes", "/clientes"],
   ["📈", "Relatórios", "/relatorios"],
+  ["👤", "Usuários e acessos", "/usuarios"],
   ["⚙️", "Configurações", "/"],
 ];
 
