@@ -1,0 +1,11 @@
+CORREÇÃO: FLUXO ÚNICO DE DESLIGAMENTO
+
+Na tela Usuários e acessos, contas do tipo Motorista vinculadas a um cadastro agora exibem o botão "Desligar motorista".
+
+A ação:
+- bloqueia a conta de acesso;
+- altera o motorista para Inativo;
+- remove o vínculo com o caminhão;
+- preserva viagens, relatórios e demais históricos.
+
+O botão anterior "Excluir conta" foi renomeado para "Excluir somente login" para deixar claro que ele não arquiva o cadastro do motorista.
