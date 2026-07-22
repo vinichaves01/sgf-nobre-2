@@ -52,7 +52,7 @@ async function exigirAdministrador(request: NextRequest) {
   } as const;
 }
 
-async function obterPerfil(adminClient: ReturnType<typeof createClient>, id: string) {
+async function obterPerfil(adminClient: any, id: string) {
   const { data, error } = await adminClient
     .from("perfis")
     .select("id, nome, tipo, ativo, motorista_id, administrador_mestre")
@@ -63,7 +63,7 @@ async function obterPerfil(adminClient: ReturnType<typeof createClient>, id: str
 }
 
 async function validarSenhaAtual(
-  authClient: ReturnType<typeof createClient>,
+  authClient: any,
   email: string,
   senhaAtual: string
 ) {
