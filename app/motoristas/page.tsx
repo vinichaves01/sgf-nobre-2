@@ -290,6 +290,23 @@ export default function MotoristasPage() {
     setSalvando(false);
   }
 
+  async function requisicaoAdministrativa(url: string, opcoes: RequestInit) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error("Sessão expirada.");
+
+    const resposta = await fetch(url, {
+      ...opcoes,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+        ...(opcoes.headers ?? {}),
+      },
+    });
+    const dados = await resposta.json();
+    if (!resposta.ok) throw new Error(dados.erro ?? "Não foi possível concluir a operação.");
+    return dados;
+  }
+
   async function alterarStatus(
     motorista: Motorista,
     novoStatus: StatusMotorista
@@ -344,27 +361,40 @@ export default function MotoristasPage() {
     );
   }
 
-  async function excluirMotorista(motorista: Motorista) {
+  async function arquivarMotorista(motorista: Motorista) {
     const confirmar = window.confirm(
-      `Deseja realmente excluir o motorista "${motorista.nome}"?`
+      `Arquivar ${motorista.nome}? O motorista ficará inativo, será desvinculado do caminhão e sua conta de acesso será bloqueada. O histórico será preservado.`
     );
-
     if (!confirmar) return;
 
-    const { error } = await supabase
-      .from("motoristas")
-      .delete()
-      .eq("id", motorista.id);
-
-    if (error) {
-      setMensagem(
-        `Erro ao excluir motorista: ${error.message}`
-      );
-      return;
+    try {
+      const dados = await requisicaoAdministrativa("/api/admin/motoristas", {
+        method: "PATCH",
+        body: JSON.stringify({ id: motorista.id, acao: "arquivar" }),
+      });
+      await carregarDados();
+      setMensagem(dados.mensagem ?? "Motorista arquivado com sucesso.");
+    } catch (error) {
+      setMensagem(error instanceof Error ? error.message : "Erro ao arquivar motorista.");
     }
+  }
 
-    await carregarDados();
-    setMensagem("Motorista excluído com sucesso.");
+  async function excluirMotorista(motorista: Motorista) {
+    const confirmacao = window.prompt(
+      `A exclusão só é permitida sem conta vinculada e sem histórico de viagens. Para excluir ${motorista.nome}, digite EXCLUIR:`
+    );
+    if (confirmacao !== "EXCLUIR") return;
+
+    try {
+      await requisicaoAdministrativa(
+        `/api/admin/motoristas?id=${encodeURIComponent(motorista.id)}`,
+        { method: "DELETE" }
+      );
+      await carregarDados();
+      setMensagem("Motorista excluído definitivamente.");
+    } catch (error) {
+      setMensagem(error instanceof Error ? error.message : "Erro ao excluir motorista.");
+    }
   }
 
   function encontrarVeiculo(veiculoId: string | null) {
@@ -1129,9 +1159,18 @@ export default function MotoristasPage() {
 
                         <button
                           onClick={() =>
+                            arquivarMotorista(motorista)
+                          }
+                          className="rounded-lg bg-slate-700 px-3 py-2 text-sm font-semibold text-white"
+                        >
+                          Arquivar
+                        </button>
+
+                        <button
+                          onClick={() =>
                             excluirMotorista(motorista)
                           }
-                          className="rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white"
+                          className="rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-semibold text-red-700"
                         >
                           Excluir
                         </button>

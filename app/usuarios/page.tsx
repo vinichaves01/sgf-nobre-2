@@ -129,6 +129,33 @@ export default function UsuariosPage() {
     } catch (e) { setErro(e instanceof Error ? e.message : "Erro ao alterar e-mail."); }
   }
 
+  async function excluirConta(usuario: Usuario) {
+    const confirmacao = window.prompt(
+      `Para excluir definitivamente a conta de ${usuario.nome}, digite EXCLUIR:`
+    );
+    if (confirmacao !== "EXCLUIR") return;
+
+    setErro("");
+    setMensagem("");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.replace("/login");
+        throw new Error("Sessão expirada.");
+      }
+      const resposta = await fetch(`/api/admin/usuarios?id=${encodeURIComponent(usuario.id)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const dados = await resposta.json();
+      if (!resposta.ok) throw new Error(dados.erro ?? "Não foi possível excluir a conta.");
+      setMensagem("Conta excluída definitivamente. O cadastro e o histórico do motorista foram preservados.");
+      await carregar();
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Erro ao excluir conta.");
+    }
+  }
+
   function dataHora(valor: string | null) {
     return valor ? new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(valor)) : "Nunca acessou";
   }
@@ -170,7 +197,7 @@ export default function UsuariosPage() {
                   <div className="flex items-start justify-between gap-3"><div><h3 className="text-lg font-bold">{u.nome || "Sem nome"}</h3><p className="text-sm text-slate-500">{u.email}</p></div><span className={`rounded-full px-3 py-1 text-xs font-bold ${u.ativo ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>{u.ativo ? "Ativo" : "Bloqueado"}</span></div>
                   <div className="mt-4 grid grid-cols-2 gap-3 text-sm"><div><span className="text-slate-500">Perfil</span><p className="font-semibold">{u.tipo}</p></div><div><span className="text-slate-500">Último acesso</span><p className="font-semibold">{dataHora(u.ultimo_acesso)}</p></div></div>
                   {u.tipo === "Motorista" && <div className="mt-4"><label className="text-sm text-slate-500">Motorista vinculado</label><select value={u.motorista_id ?? ""} onChange={(e) => void alterarPerfil(u, { motorista_id: e.target.value })} className="mt-1 w-full rounded-xl border px-3 py-2"><option value="">Não vinculado</option>{motoristas.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}</select></div>}
-                  <div className="mt-4 flex flex-wrap gap-2"><button onClick={() => void alterarEmail(u)} className="rounded-lg border px-3 py-2 text-sm font-semibold">Alterar e-mail</button><button onClick={() => void redefinirSenha(u)} className="rounded-lg border px-3 py-2 text-sm font-semibold">Nova senha</button><button onClick={() => void alterarPerfil(u, { ativo: !u.ativo })} className={`rounded-lg px-3 py-2 text-sm font-bold text-white ${u.ativo ? "bg-red-600" : "bg-green-600"}`}>{u.ativo ? "Bloquear" : "Liberar"}</button></div>
+                  <div className="mt-4 flex flex-wrap gap-2"><button onClick={() => void alterarEmail(u)} className="rounded-lg border px-3 py-2 text-sm font-semibold">Alterar e-mail</button><button onClick={() => void redefinirSenha(u)} className="rounded-lg border px-3 py-2 text-sm font-semibold">Nova senha</button><button onClick={() => void alterarPerfil(u, { ativo: !u.ativo })} className={`rounded-lg px-3 py-2 text-sm font-bold text-white ${u.ativo ? "bg-red-600" : "bg-green-600"}`}>{u.ativo ? "Bloquear" : "Liberar"}</button><button onClick={() => void excluirConta(u)} className="rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-bold text-red-700">Excluir conta</button></div>
                 </article>
               ))}
             </div>

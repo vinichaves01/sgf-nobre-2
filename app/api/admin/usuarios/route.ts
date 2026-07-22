@@ -249,3 +249,38 @@ export async function PATCH(request: NextRequest) {
     );
   }
 }
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const acesso = await exigirAdministrador(request);
+    if ("erro" in acesso) {
+      return NextResponse.json({ erro: acesso.erro }, { status: acesso.status });
+    }
+
+    const id = new URL(request.url).searchParams.get("id") ?? "";
+    if (!id) {
+      return NextResponse.json({ erro: "Usuário não informado." }, { status: 400 });
+    }
+    if (id === acesso.usuarioAtualId) {
+      return NextResponse.json(
+        { erro: "Você não pode excluir a conta que está usando." },
+        { status: 400 }
+      );
+    }
+
+    const { error } = await acesso.adminClient.auth.admin.deleteUser(id);
+    if (error) {
+      return NextResponse.json({ erro: error.message }, { status: 400 });
+    }
+
+    // Garante a limpeza do perfil caso o projeto não possua cascata no vínculo com auth.users.
+    await acesso.adminClient.from("perfis").delete().eq("id", id);
+
+    return NextResponse.json({ sucesso: true });
+  } catch (error) {
+    return NextResponse.json(
+      { erro: error instanceof Error ? error.message : "Erro inesperado." },
+      { status: 500 }
+    );
+  }
+}

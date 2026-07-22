@@ -1,0 +1,15 @@
+CORREÇÃO — EXCLUSÃO E ARQUIVAMENTO
+
+Não é necessário executar novo SQL no Supabase.
+
+O que foi adicionado:
+- Excluir conta de acesso em Usuários e acessos.
+- Impedir a exclusão da própria conta em uso.
+- Arquivar motorista: muda para Inativo, remove o caminhão vinculado e bloqueia a conta de acesso.
+- Excluir motorista somente quando não existir conta vinculada nem histórico de viagens.
+- Confirmação digitando EXCLUIR para exclusões definitivas.
+
+Instalação:
+1. Envie todo o conteúdo desta pasta ao repositório GitHub.
+2. Faça commit na branch main.
+3. Aguarde o deploy da Vercel ficar Ready.
