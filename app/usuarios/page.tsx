@@ -17,6 +17,8 @@ type Usuario = {
   motorista_id: string | null;
   criado_em: string;
   ultimo_acesso: string | null;
+  administrador_mestre: boolean;
+  usuario_atual: boolean;
 };
 
 type Motorista = { id: string; nome: string; email: string | null; status: string };
@@ -39,6 +41,7 @@ export default function UsuariosPage() {
   const [salvando, setSalvando] = useState(false);
   const [mensagem, setMensagem] = useState("");
   const [erro, setErro] = useState("");
+  const [usuarioAtualMestre, setUsuarioAtualMestre] = useState(false);
 
   const requisicao = useCallback(async (opcoes?: RequestInit) => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -63,12 +66,13 @@ export default function UsuariosPage() {
     setCarregando(true);
     setErro("");
     try {
-      const [{ usuarios: lista }, motoristasResultado] = await Promise.all([
+      const [usuariosResultado, motoristasResultado] = await Promise.all([
         requisicao(),
         supabase.from("motoristas").select("id, nome, email, status").order("nome"),
       ]);
       if (motoristasResultado.error) throw motoristasResultado.error;
-      setUsuarios(lista ?? []);
+      setUsuarios(usuariosResultado.usuarios ?? []);
+      setUsuarioAtualMestre(Boolean(usuariosResultado.usuarioAtualMestre));
       setMotoristas(motoristasResultado.data ?? []);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Erro ao carregar usuários.");
@@ -112,19 +116,35 @@ export default function UsuariosPage() {
   }
 
   async function redefinirSenha(usuario: Usuario) {
+    if (usuario.administrador_mestre && !usuario.usuario_atual) {
+      setErro("Somente o próprio Administrador Mestre pode alterar essa senha.");
+      return;
+    }
+    const senhaAtual = usuario.administrador_mestre
+      ? window.prompt("Confirme sua senha atual de login:")
+      : "";
+    if (usuario.administrador_mestre && senhaAtual === null) return;
     const senha = window.prompt(`Digite a nova senha para ${usuario.nome}:`);
     if (senha === null) return;
     try {
-      await requisicao({ method: "PATCH", body: JSON.stringify({ id: usuario.id, acao: "redefinir_senha", senha }) });
+      await requisicao({ method: "PATCH", body: JSON.stringify({ id: usuario.id, acao: "redefinir_senha", senha, senha_atual: senhaAtual }) });
       setMensagem("Senha redefinida. A senha anterior deixou de funcionar."); setErro("");
     } catch (e) { setErro(e instanceof Error ? e.message : "Erro ao redefinir senha."); }
   }
 
   async function alterarEmail(usuario: Usuario) {
+    if (usuario.administrador_mestre && !usuario.usuario_atual) {
+      setErro("Somente o próprio Administrador Mestre pode alterar esse e-mail.");
+      return;
+    }
+    const senhaAtual = usuario.administrador_mestre
+      ? window.prompt("Confirme sua senha atual de login:")
+      : "";
+    if (usuario.administrador_mestre && senhaAtual === null) return;
     const email = window.prompt("Digite o novo e-mail:", usuario.email);
     if (email === null || email.trim() === usuario.email) return;
     try {
-      await requisicao({ method: "PATCH", body: JSON.stringify({ id: usuario.id, acao: "alterar_email", email }) });
+      await requisicao({ method: "PATCH", body: JSON.stringify({ id: usuario.id, acao: "alterar_email", email, senha_atual: senhaAtual }) });
       setMensagem("E-mail alterado."); setErro(""); await carregar();
     } catch (e) { setErro(e instanceof Error ? e.message : "Erro ao alterar e-mail."); }
   }
@@ -229,7 +249,7 @@ export default function UsuariosPage() {
               <Campo rotulo="Nome completo"><input required value={formulario.nome} onChange={(e) => setFormulario({ ...formulario, nome: e.target.value })} className="w-full rounded-xl border px-4 py-3" /></Campo>
               <Campo rotulo="E-mail de acesso"><input required type="email" value={formulario.email} onChange={(e) => setFormulario({ ...formulario, email: e.target.value })} className="w-full rounded-xl border px-4 py-3" /></Campo>
               <Campo rotulo="Senha inicial"><input required minLength={6} type="text" value={formulario.senha} onChange={(e) => setFormulario({ ...formulario, senha: e.target.value })} className="w-full rounded-xl border px-4 py-3" /></Campo>
-              <Campo rotulo="Perfil"><select value={formulario.tipo} onChange={(e) => setFormulario({ ...formulario, tipo: e.target.value as TipoPerfil, motorista_id: e.target.value === "Administrador" ? "" : formulario.motorista_id })} className="w-full rounded-xl border px-4 py-3"><option>Motorista</option><option>Administrador</option></select></Campo>
+              <Campo rotulo="Perfil"><select value={formulario.tipo} onChange={(e) => setFormulario({ ...formulario, tipo: e.target.value as TipoPerfil, motorista_id: e.target.value === "Administrador" ? "" : formulario.motorista_id })} className="w-full rounded-xl border px-4 py-3"><option>Motorista</option>{usuarioAtualMestre && <option>Administrador</option>}</select></Campo>
               {formulario.tipo === "Motorista" && <Campo rotulo="Motorista vinculado"><select required value={formulario.motorista_id} onChange={(e) => setFormulario({ ...formulario, motorista_id: e.target.value })} className="w-full rounded-xl border px-4 py-3"><option value="">Selecione...</option>{motoristas.map((m) => <option key={m.id} value={m.id}>{m.nome} — {m.status}</option>)}</select></Campo>}
             </div>
             <div className="mt-5 flex gap-3"><button disabled={salvando} className="rounded-xl bg-green-600 px-5 py-3 font-bold text-white disabled:opacity-60">{salvando ? "Criando..." : "Criar conta"}</button><button type="button" onClick={() => setMostrarFormulario(false)} className="rounded-xl bg-slate-200 px-5 py-3 font-semibold">Cancelar</button></div>
@@ -243,9 +263,15 @@ export default function UsuariosPage() {
               {usuarios.map((u) => (
                 <article key={u.id} className={`rounded-2xl border p-4 ${u.ativo ? "bg-white" : "bg-slate-100 opacity-75"}`}>
                   <div className="flex items-start justify-between gap-3"><div><h3 className="text-lg font-bold">{u.nome || "Sem nome"}</h3><p className="text-sm text-slate-500">{u.email}</p></div><span className={`rounded-full px-3 py-1 text-xs font-bold ${u.ativo ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>{u.ativo ? "Ativo" : "Bloqueado"}</span></div>
-                  <div className="mt-4 grid grid-cols-2 gap-3 text-sm"><div><span className="text-slate-500">Perfil</span><p className="font-semibold">{u.tipo}</p></div><div><span className="text-slate-500">Último acesso</span><p className="font-semibold">{dataHora(u.ultimo_acesso)}</p></div></div>
+                  <div className="mt-4 grid grid-cols-2 gap-3 text-sm"><div><span className="text-slate-500">Perfil</span><p className="font-semibold">{u.administrador_mestre ? "Administrador Mestre" : u.tipo}</p></div><div><span className="text-slate-500">Último acesso</span><p className="font-semibold">{dataHora(u.ultimo_acesso)}</p></div></div>
                   {u.tipo === "Motorista" && <div className="mt-4"><label className="text-sm text-slate-500">Motorista vinculado</label><select value={u.motorista_id ?? ""} onChange={(e) => void alterarPerfil(u, { motorista_id: e.target.value })} className="mt-1 w-full rounded-xl border px-3 py-2"><option value="">Não vinculado</option>{motoristas.map((m) => <option key={m.id} value={m.id}>{m.nome}</option>)}</select></div>}
-                  <div className="mt-4 flex flex-wrap gap-2"><button onClick={() => void alterarEmail(u)} className="rounded-lg border px-3 py-2 text-sm font-semibold">Alterar e-mail</button><button onClick={() => void redefinirSenha(u)} className="rounded-lg border px-3 py-2 text-sm font-semibold">Nova senha</button><button onClick={() => void alterarPerfil(u, { ativo: !u.ativo })} className={`rounded-lg px-3 py-2 text-sm font-bold text-white ${u.ativo ? "bg-red-600" : "bg-green-600"}`}>{u.ativo ? "Bloquear" : "Liberar"}</button>{u.tipo === "Motorista" && u.motorista_id && <button onClick={() => void desligarMotorista(u)} className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-bold text-white">Desligar motorista</button>}<button onClick={() => void excluirConta(u)} className="rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-bold text-red-700">Excluir somente login</button></div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {(!u.administrador_mestre || u.usuario_atual) && <button onClick={() => void alterarEmail(u)} className="rounded-lg border px-3 py-2 text-sm font-semibold">{u.administrador_mestre ? "Alterar meu e-mail" : "Alterar e-mail"}</button>}
+                    {(!u.administrador_mestre || u.usuario_atual) && <button onClick={() => void redefinirSenha(u)} className="rounded-lg border px-3 py-2 text-sm font-semibold">{u.administrador_mestre ? "Alterar minha senha" : "Nova senha"}</button>}
+                    {!u.administrador_mestre && <button onClick={() => void alterarPerfil(u, { ativo: !u.ativo })} className={`rounded-lg px-3 py-2 text-sm font-bold text-white ${u.ativo ? "bg-red-600" : "bg-green-600"}`}>{u.ativo ? "Bloquear" : "Liberar"}</button>}
+                    {u.tipo === "Motorista" && u.motorista_id && <button onClick={() => void desligarMotorista(u)} className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-bold text-white">Desligar motorista</button>}
+                    {!u.administrador_mestre && <button onClick={() => void excluirConta(u)} className="rounded-lg border border-red-300 bg-white px-3 py-2 text-sm font-bold text-red-700">Excluir somente login</button>}
+                  </div>
                 </article>
               ))}
             </div>
