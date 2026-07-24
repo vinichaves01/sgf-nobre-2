@@ -21,6 +21,21 @@ type Linha = {
 
 type FiltroStatus = "TODOS" | "EM_OPERACAO" | "AGUARDANDO" | "SEM_GPS" | "INATIVOS";
 
+type EventoOperacionalResumo = {
+  jornada_id: string;
+  motorista_id: string;
+  tipo_evento: string;
+  ocorrido_em: string;
+};
+
+type LocalizacaoGpsResumo = {
+  motorista_id: string;
+  latitude: number | null;
+  longitude: number | null;
+  capturado_em: string;
+  velocidade_kmh: number | null;
+};
+
 const EVENTOS: Record<string, { rotulo: string; grupo: "MOVIMENTO" | "PARADO" | "AGUARDANDO" | "OCORRENCIA"; icone: string }> = {
   JORNADA_INICIADA: { rotulo: "Jornada iniciada", grupo: "PARADO", icone: "🟢" },
   SAINDO_PARA_CARREGAMENTO: { rotulo: "Indo para carregamento", grupo: "MOVIMENTO", icone: "🚛" },
@@ -130,13 +145,13 @@ export default function CentralOperacoesPage() {
       : { data: [] };
 
     const jornadaPorMotorista = new Map((jornadas ?? []).map((jornada) => [jornada.motorista_id, jornada.id]));
-    const eventoAtual = new Map<string, (typeof eventos extends (infer T)[] | null ? T : never)>();
-    for (const evento of eventos ?? []) {
+    const eventoAtual = new Map<string, EventoOperacionalResumo>();
+    for (const evento of (eventos ?? []) as EventoOperacionalResumo[]) {
       if (!eventoAtual.has(evento.motorista_id)) eventoAtual.set(evento.motorista_id, evento);
     }
 
-    const gpsAtual = new Map<string, (typeof gps extends (infer T)[] | null ? T : never)>();
-    for (const localizacao of gps ?? []) {
+    const gpsAtual = new Map<string, LocalizacaoGpsResumo>();
+    for (const localizacao of (gps ?? []) as LocalizacaoGpsResumo[]) {
       if (!gpsAtual.has(localizacao.motorista_id)) gpsAtual.set(localizacao.motorista_id, localizacao);
     }
 
