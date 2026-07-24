@@ -1,0 +1,18 @@
+SGF NOBRE — SPRINT 2: FLUXO GUIADO DO MOTORISTA
+
+O que mudou:
+- O motorista agora vê somente a próxima ação principal da operação.
+- Abastecimento, descanso, manutenção e encerramento ficaram dentro de “Outras ocorrências”.
+- Após a descarga concluída, aparecem as duas decisões reais: “Aguardando destino” e “Saindo para carregamento”.
+- O GPS tenta ser ativado automaticamente quando a jornada é iniciada.
+- A linha do tempo e as regras já existentes foram preservadas.
+
+BANCO DE DADOS
+- Não execute nenhum SQL para esta versão.
+- Use o mesmo Supabase já configurado.
+
+PUBLICAÇÃO
+1. Substitua os arquivos do repositório pelos arquivos desta pasta.
+2. Faça commit e push para a branch main.
+3. Aguarde a Vercel mostrar Ready.
+4. Teste /motorista no celular.

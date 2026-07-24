@@ -45,7 +45,25 @@ export default function MotoristaPage(){
  const router=useRouter(); const [perfil,setPerfil]=useState<Perfil|null>(null); const [motorista,setMotorista]=useState<Motorista|null>(null);
  const [jornada,setJornada]=useState<Jornada|null>(null); const [eventos,setEventos]=useState<Evento[]>([]); const [msg,setMsg]=useState("");
  const [loading,setLoading]=useState(true); const [salvando,setSalvando]=useState(false); const [gps,setGps]=useState(false); const [agora,setAgora]=useState(Date.now()); const watchRef=useRef<number|null>(null);
- const ultimo=eventos[0]??null; const botoes=ultimo ? (proximos[ultimo.tipo_evento]??[]) : [];
+ const ultimo=eventos[0]??null;
+ const botoes=ultimo ? (proximos[ultimo.tipo_evento]??[]) : [];
+ const principaisPorEtapa: Partial<Record<EventoTipo,EventoTipo[]>> = {
+   JORNADA_INICIADA:["SAINDO_PARA_CARREGAMENTO"],
+   SAINDO_PARA_CARREGAMENTO:["CHEGOU_CARREGAMENTO"],
+   CHEGOU_CARREGAMENTO:["CARREGADO_SAINDO_DESCARGA"],
+   CARREGADO_SAINDO_DESCARGA:["CHEGOU_DESCARGA"],
+   CHEGOU_DESCARGA:["DESCARGA_CONCLUIDA"],
+   DESCARGA_CONCLUIDA:["AGUARDANDO_DESTINO","SAINDO_PARA_CARREGAMENTO"],
+   AGUARDANDO_DESTINO:["SAINDO_PARA_CARREGAMENTO"],
+   ABASTECIMENTO_INICIADO:["ABASTECIMENTO_CONCLUIDO"],
+   ABASTECIMENTO_CONCLUIDO:["SAINDO_PARA_CARREGAMENTO"],
+   DESCANSO_INICIADO:["DESCANSO_FINALIZADO"],
+   DESCANSO_FINALIZADO:["SAINDO_PARA_CARREGAMENTO"],
+   MANUTENCAO_INICIADA:["MANUTENCAO_FINALIZADA"],
+   MANUTENCAO_FINALIZADA:["SAINDO_PARA_CARREGAMENTO"]
+ };
+ const principais=ultimo ? (principaisPorEtapa[ultimo.tipo_evento]??[]) : [];
+ const secundarios=botoes.filter(t=>!principais.includes(t));
  const carregar=useCallback(async()=>{
    const {data:{user}}=await supabase.auth.getUser(); if(!user){router.replace("/login");return;}
    const {data:p,error:pe}=await supabase.from("perfis").select("nome,tipo,ativo,motorista_id").eq("id",user.id).single();
@@ -62,6 +80,7 @@ export default function MotoristaPage(){
  useEffect(()=>{if(!motorista)return; const c=supabase.channel(`motorista-${motorista.id}`).on("postgres_changes",{event:"*",schema:"public",table:"eventos_operacionais",filter:`motorista_id=eq.${motorista.id}`},()=>void carregar()).subscribe(); return()=>{void supabase.removeChannel(c)};},[motorista,carregar]);
  useEffect(()=>()=>{if(watchRef.current!==null)navigator.geolocation?.clearWatch(watchRef.current);},[]);
  useEffect(()=>{if(!jornada&&watchRef.current!==null){navigator.geolocation?.clearWatch(watchRef.current);watchRef.current=null;setGps(false);}},[jornada]);
+ useEffect(()=>{if(jornada&&watchRef.current===null)iniciarGps();},[jornada?.id]);
  const obterPosicao=()=>new Promise<GeolocationPosition|null>((resolve)=>{if(!navigator.geolocation)return resolve(null);navigator.geolocation.getCurrentPosition(resolve,()=>resolve(null),{enableHighAccuracy:true,timeout:10000,maximumAge:15000});});
  async function registrar(tipo:EventoTipo){setSalvando(true);setMsg("");const p=await obterPosicao();const {error}=await supabase.rpc("registrar_evento_operacional",{p_tipo_evento:tipo,p_latitude:p?.coords.latitude??null,p_longitude:p?.coords.longitude??null,p_precisao_metros:p?.coords.accuracy??null,p_observacao:null});if(error)setMsg(error.message);else await carregar();setSalvando(false);}
  function iniciarGps(){if(watchRef.current!==null)return;if(!motorista||!navigator.geolocation){setMsg("GPS não disponível neste aparelho.");return;} watchRef.current=navigator.geolocation.watchPosition(async p=>{setGps(true);await supabase.from("localizacoes_gps").insert({motorista_id:motorista.id,veiculo_id:motorista.veiculo_id,jornada_id:jornada?.id??null,latitude:p.coords.latitude,longitude:p.coords.longitude,precisao_metros:p.coords.accuracy,velocidade_kmh:p.coords.speed==null?null:p.coords.speed*3.6,direcao_graus:p.coords.heading,altitude_metros:p.coords.altitude,capturado_em:new Date(p.timestamp).toISOString()});},()=>{setGps(false);setMsg("Não foi possível manter o GPS ativo. Confira a permissão de localização.");},{enableHighAccuracy:true,maximumAge:10000,timeout:20000});}
@@ -75,7 +94,14 @@ export default function MotoristaPage(){
  </section>
  {jornada&&<section className="rounded-3xl border border-slate-800 bg-slate-900 p-4"><div className="flex items-center justify-between"><div><h3 className="font-bold">Rastreamento pelo celular</h3><p className="text-xs text-slate-400">Envia sua posição durante a jornada.</p></div><button onClick={gps?pararGps:iniciarGps} className={`rounded-xl px-4 py-3 font-bold ${gps?"bg-emerald-500 text-slate-950":"bg-slate-700"}`}>{gps?"GPS ativo":"Ativar GPS"}</button></div></section>}
  {msg&&<div className="rounded-2xl border border-red-800 bg-red-950/60 p-4 text-sm text-red-200">{msg}</div>}
- {jornada&&<section className="grid gap-3">{botoes.map(t=><button key={t} disabled={salvando} onClick={()=>registrar(t)} className={`rounded-2xl px-5 py-5 text-left text-lg font-black shadow-lg disabled:opacity-50 ${t==="JORNADA_ENCERRADA"?"bg-red-600":"bg-amber-400 text-slate-950"}`}>{rotulos[t]}</button>)}</section>}
+ {jornada&&<section className="space-y-3">
+   <p className="px-1 text-xs font-bold uppercase tracking-[.2em] text-slate-400">Próxima ação</p>
+   <div className="grid gap-3">{principais.map(t=><button key={t} disabled={salvando} onClick={()=>registrar(t)} className="rounded-2xl bg-amber-400 px-5 py-5 text-left text-lg font-black text-slate-950 shadow-lg disabled:opacity-50">{rotulos[t]}</button>)}</div>
+   {secundarios.length>0&&<details className="rounded-2xl border border-slate-800 bg-slate-900">
+     <summary className="cursor-pointer list-none px-5 py-4 font-bold text-slate-200">Outras ocorrências</summary>
+     <div className="grid gap-3 border-t border-slate-800 p-3">{secundarios.map(t=><button key={t} disabled={salvando} onClick={()=>registrar(t)} className={`rounded-xl px-4 py-4 text-left font-bold disabled:opacity-50 ${t==="JORNADA_ENCERRADA"?"bg-red-600 text-white":"bg-slate-800 text-white"}`}>{rotulos[t]}</button>)}</div>
+   </details>}
+ </section>}
  {eventos.length>0&&<section className="rounded-3xl bg-white p-5 text-slate-950"><h3 className="text-lg font-black">Linha do tempo de hoje</h3><div className="mt-4 space-y-4">{eventos.map((e,i)=><div key={e.id} className="flex gap-3"><div className="flex flex-col items-center"><span className="mt-1 h-3 w-3 rounded-full bg-amber-400"/>{i<eventos.length-1&&<span className="h-full w-px bg-slate-200"/>}</div><div className="pb-3"><p className="font-bold">{rotulos[e.tipo_evento]}</p><p className="text-sm text-slate-500">{hora(e.ocorrido_em)}{e.latitude!=null?" • localização registrada":""}</p></div></div>)}</div></section>}
  </div></main>;
 }
