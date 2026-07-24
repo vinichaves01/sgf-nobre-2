@@ -1,0 +1,24 @@
+SGF NOBRE — SPRINT 3 — CENTRAL DE OPERAÇÕES
+
+O QUE FOI ALTERADO
+- Central de Operações redesenhada.
+- Cartões com motorista, veículo, situação atual, hora de início da etapa e duração ao vivo.
+- Indicadores de motoristas em operação, aguardando, GPS online e sem sinal.
+- Busca por motorista, placa ou modelo.
+- Filtros operacionais.
+- Indicador de GPS online, atrasado ou sem atualização.
+- Atualização por eventos em tempo real e conferência automática a cada 15 segundos.
+- Botão para abrir a última localização no mapa.
+
+INSTALAÇÃO
+1. Não execute SQL.
+2. Substitua os arquivos do repositório pelos arquivos desta pasta.
+3. Faça commit e push na branch main.
+4. Aguarde a Vercel mostrar Ready.
+5. Acesse /central-operacoes com o administrador.
+
+TESTE
+- Mantenha uma jornada ativa no celular do motorista.
+- Ative o GPS no celular.
+- Abra /central-operacoes em outro aparelho.
+- Confirme situação, duração, GPS e botão de localização.
