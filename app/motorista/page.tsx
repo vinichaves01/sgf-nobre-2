@@ -179,6 +179,7 @@ export default function MotoristaPage() {
   const [agora, setAgora] = useState(Date.now());
 
   const watchRef = useRef<number | null>(null);
+  const nativeGpsRef = useRef(false);
 
   const ultimo = eventos[0] ?? null;
   const botoes = ultimo ? (proximos[ultimo.tipo_evento] ?? []) : [];
@@ -326,15 +327,8 @@ export default function MotoristaPage() {
   }, []);
 
   useEffect(() => {
-    if (
-      !jornada &&
-      watchRef.current !== null &&
-      typeof navigator !== "undefined" &&
-      navigator.geolocation
-    ) {
-      navigator.geolocation.clearWatch(watchRef.current);
-      watchRef.current = null;
-      setGps(false);
+    if (!jornada && (watchRef.current !== null || nativeGpsRef.current)) {
+      void pararGps();
     }
   }, [jornada]);
 
@@ -433,27 +427,64 @@ export default function MotoristaPage() {
     }.`;
   }
 
+  async function iniciarGpsNativo() {
+    const [{ Capacitor }, { BackgroundGeolocation }] = await Promise.all([
+      import("@capacitor/core"),
+      import("@capgo/background-geolocation"),
+    ]);
+
+    if (!Capacitor.isNativePlatform()) return false;
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+    if (!accessToken) throw new Error("Sessão expirada. Entre novamente no SGF.");
+
+    const response = await fetch("/api/mobile/tracking-token", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const result = (await response.json()) as { url?: string; erro?: string };
+    if (!response.ok || !result.url) {
+      throw new Error(result.erro ?? "Não foi possível preparar o rastreamento nativo.");
+    }
+
+    await BackgroundGeolocation.start(
+      {
+        backgroundTitle: "SGF Nobre em operação",
+        backgroundMessage: "Rastreamento ativo durante a jornada.",
+        requestPermissions: true,
+        stale: false,
+        distanceFilter: 25,
+        url: result.url,
+      },
+      (location, error) => {
+        if (error) {
+          setGps(false);
+          setMsg(
+            error.code === "NOT_AUTHORIZED"
+              ? "Autorize a localização sempre para manter o rastreamento em segundo plano."
+              : `Falha no rastreamento nativo: ${error.message ?? error.code ?? "erro desconhecido"}.`,
+          );
+          return;
+        }
+
+        if (location) {
+          setGps(true);
+          setMsg("");
+        }
+      },
+    );
+
+    nativeGpsRef.current = true;
+    setGps(true);
+    return true;
+  }
+
   async function iniciarGps() {
-    if (watchRef.current !== null || gpsIniciando) return;
+    if (watchRef.current !== null || nativeGpsRef.current || gpsIniciando) return;
 
     setMsg("");
 
-    if (
-      typeof window === "undefined" ||
-      typeof navigator === "undefined" ||
-      !navigator.geolocation
-    ) {
-      setMsg(
-        "Este navegador não oferece suporte à localização. Abra o SGF no Safari ou Chrome atualizado.",
-      );
-      return;
-    }
-
-    /*
-     * Agora o GPS depende somente de existir uma jornada ativa.
-     * Não depende mais do objeto "motorista", que era a causa da mensagem
-     * incorreta de dados ainda carregando.
-     */
     if (!jornada) {
       setMsg(
         "Nenhuma jornada ativa foi encontrada. Atualize a página ou inicie uma jornada antes de ligar o GPS.",
@@ -463,64 +494,94 @@ export default function MotoristaPage() {
 
     setGpsIniciando(true);
 
-    navigator.geolocation.getCurrentPosition(
-      async (posicaoInicial) => {
-        try {
-          await salvarPosicao(posicaoInicial);
+    try {
+      if (await iniciarGpsNativo()) {
+        return;
+      }
 
-          setGps(true);
-          setMsg("");
+      if (
+        typeof window === "undefined" ||
+        typeof navigator === "undefined" ||
+        !navigator.geolocation
+      ) {
+        setMsg(
+          "Este navegador não oferece suporte à localização. Abra o SGF no Safari ou Chrome atualizado.",
+        );
+        return;
+      }
 
-          watchRef.current = navigator.geolocation.watchPosition(
-            async (novaPosicao) => {
-              try {
-                await salvarPosicao(novaPosicao);
-                setGps(true);
-                setMsg("");
-              } catch (error) {
-                setMsg(
-                  error instanceof Error
-                    ? `GPS obtido, mas não foi possível salvar: ${error.message}`
-                    : "GPS obtido, mas não foi possível salvar a posição.",
-                );
-              }
-            },
-            (error) => {
-              setGps(false);
-              setMsg(mensagemGps(error));
-            },
-            {
-              enableHighAccuracy: true,
-              maximumAge: 10000,
-              timeout: 30000,
-            },
-          );
-        } catch (error) {
+      navigator.geolocation.getCurrentPosition(
+        async (posicaoInicial) => {
+          try {
+            await salvarPosicao(posicaoInicial);
+
+            setGps(true);
+            setMsg("");
+
+            watchRef.current = navigator.geolocation.watchPosition(
+              async (novaPosicao) => {
+                try {
+                  await salvarPosicao(novaPosicao);
+                  setGps(true);
+                  setMsg("");
+                } catch (error) {
+                  setMsg(
+                    error instanceof Error
+                      ? `GPS obtido, mas não foi possível salvar: ${error.message}`
+                      : "GPS obtido, mas não foi possível salvar a posição.",
+                  );
+                }
+              },
+              (error) => {
+                setGps(false);
+                setMsg(mensagemGps(error));
+              },
+              {
+                enableHighAccuracy: true,
+                maximumAge: 10000,
+                timeout: 30000,
+              },
+            );
+          } catch (error) {
+            setGps(false);
+            setMsg(
+              error instanceof Error
+                ? `Localização obtida, mas não foi possível salvar: ${error.message}`
+                : "Localização obtida, mas não foi possível salvar.",
+            );
+          }
+        },
+        (error) => {
           setGps(false);
-
-          setMsg(
-            error instanceof Error
-              ? `Localização obtida, mas não foi possível salvar: ${error.message}`
-              : "Localização obtida, mas não foi possível salvar.",
-          );
-        } finally {
-          setGpsIniciando(false);
-        }
-      },
-      (error) => {
-        setGps(false);
-        setGpsIniciando(false);
-        setMsg(mensagemGps(error));
-      },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 0,
-        timeout: 30000,
-      },
-    );
+          setMsg(mensagemGps(error));
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 0,
+          timeout: 30000,
+        },
+      );
+    } catch (error) {
+      setGps(false);
+      setMsg(error instanceof Error ? error.message : "Falha ao iniciar o GPS.");
+    } finally {
+      setGpsIniciando(false);
+    }
   }
 
-  function pararGps() {
+  async function pararGps() {
+    if (nativeGpsRef.current) {
+      try {
+        const { BackgroundGeolocation } = await import(
+          "@capgo/background-geolocation"
+        );
+        await BackgroundGeolocation.stop();
+      } catch {
+        // O navegador comum não possui o plugin nativo.
+      }
+      nativeGpsRef.current = false;
+    }
+
     if (
       watchRef.current !== null &&
       typeof navigator !== "undefined" &&
@@ -534,7 +595,7 @@ export default function MotoristaPage() {
   }
 
   async function sair() {
-    pararGps();
+    await pararGps();
     await supabase.auth.signOut();
     router.replace("/login");
   }
@@ -624,7 +685,7 @@ export default function MotoristaPage() {
 
               <button
                 disabled={gpsIniciando}
-                onClick={gps ? pararGps : () => void iniciarGps()}
+                onClick={gps ? () => void pararGps() : () => void iniciarGps()}
                 className={`rounded-xl px-4 py-3 font-bold disabled:opacity-60 ${
                   gps
                     ? "bg-emerald-500 text-slate-950"
