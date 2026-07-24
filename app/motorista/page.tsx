@@ -82,12 +82,12 @@ export default function MotoristaPage(){
  useEffect(()=>{if(!jornada&&watchRef.current!==null){navigator.geolocation?.clearWatch(watchRef.current);watchRef.current=null;setGps(false);}},[jornada]);
  const obterPosicao=()=>new Promise<GeolocationPosition|null>((resolve)=>{if(!navigator.geolocation)return resolve(null);navigator.geolocation.getCurrentPosition(resolve,()=>resolve(null),{enableHighAccuracy:true,timeout:10000,maximumAge:15000});});
  async function registrar(tipo:EventoTipo){setSalvando(true);setMsg("");const p=await obterPosicao();const {error}=await supabase.rpc("registrar_evento_operacional",{p_tipo_evento:tipo,p_latitude:p?.coords.latitude??null,p_longitude:p?.coords.longitude??null,p_precisao_metros:p?.coords.accuracy??null,p_observacao:null});if(error)setMsg(error.message);else await carregar();setSalvando(false);}
- async function salvarPosicao(p:GeolocationPosition){
-   if(!motorista)return;
+ async function salvarPosicao(p: GeolocationPosition){
+   if(!motorista||!jornada)return;
    const {error}=await supabase.from("localizacoes_gps").insert({
      motorista_id:motorista.id,
      veiculo_id:motorista.veiculo_id,
-     jornada_id:jornada?.id??null,
+     jornada_id:jornada.id,
      latitude:p.coords.latitude,
      longitude:p.coords.longitude,
      precisao_metros:p.coords.accuracy,
@@ -98,45 +98,47 @@ export default function MotoristaPage(){
    });
    if(error)throw error;
  }
- function mensagemErroGps(error:GeolocationPositionError){
-   if(error.code===error.PERMISSION_DENIED)return "A localização foi bloqueada para este site. No Safari, toque em aA > Ajustes do Site > Localização > Permitir e tente novamente.";
-   if(error.code===error.POSITION_UNAVAILABLE)return "O iPhone não conseguiu determinar a localização agora. Vá para um local com melhor sinal e tente novamente.";
-   if(error.code===error.TIMEOUT)return "O GPS demorou para responder. Toque em Ativar GPS novamente.";
-   return `Falha ao acessar o GPS (${error.code}). Tente novamente.`;
+ function mensagemGps(error: GeolocationPositionError){
+   if(error.code===error.PERMISSION_DENIED)return "Permissão de localização negada. Libere a localização para este site nas configurações do navegador.";
+   if(error.code===error.POSITION_UNAVAILABLE)return "O celular não conseguiu determinar sua localização agora. Vá para um local com melhor sinal e tente novamente.";
+   if(error.code===error.TIMEOUT)return "O GPS demorou para responder. Tente novamente em alguns segundos.";
+   return `Falha ao acessar o GPS: ${error.message||"erro desconhecido"}.`;
  }
- function iniciarGps(){
+ async function iniciarGps(){
    if(watchRef.current!==null||gpsIniciando)return;
    setMsg("");
-   if(!motorista){setMsg("Motorista ainda não carregado. Atualize a página e tente novamente.");return;}
    if(typeof window==="undefined"||!("geolocation" in navigator)){
-     setMsg("Este navegador não disponibilizou a localização. Abra o SGF diretamente no Safari, fora de navegadores internos de outros aplicativos.");
+     setMsg("Este navegador não oferece suporte à localização. Abra o SGF no Safari ou Chrome atualizado.");
+     return;
+   }
+   if(!motorista||!jornada){
+     setMsg("Os dados da jornada ainda estão carregando. Aguarde alguns segundos e tente novamente.");
      return;
    }
    setGpsIniciando(true);
    navigator.geolocation.getCurrentPosition(
-     async primeiraPosicao=>{
+     async p=>{
        try{
-         await salvarPosicao(primeiraPosicao);
+         await salvarPosicao(p);
          setGps(true);
-         setGpsIniciando(false);
          watchRef.current=navigator.geolocation.watchPosition(
-           async p=>{
-             try{await salvarPosicao(p);setGps(true);setMsg("");}
-             catch(e){setMsg(e instanceof Error?e.message:"Não foi possível salvar a localização no SGF.");}
+           async pos=>{
+             try{await salvarPosicao(pos);setGps(true);setMsg("");}
+             catch(e){setMsg(e instanceof Error?`GPS obtido, mas não foi possível salvar: ${e.message}`:"GPS obtido, mas não foi possível salvar a posição.");}
            },
-           error=>{setGps(false);setGpsIniciando(false);setMsg(mensagemErroGps(error));},
+           error=>{setGps(false);setMsg(mensagemGps(error));},
            {enableHighAccuracy:true,maximumAge:10000,timeout:30000}
          );
        }catch(e){
-         setGps(false);setGpsIniciando(false);
-         setMsg(e instanceof Error?e.message:"O GPS respondeu, mas a posição não pôde ser salva no SGF.");
-       }
+         setGps(false);
+         setMsg(e instanceof Error?`Localização obtida, mas não foi possível salvar: ${e.message}`:"Localização obtida, mas não foi possível salvar.");
+       }finally{setGpsIniciando(false);}
      },
-     error=>{setGps(false);setGpsIniciando(false);setMsg(mensagemErroGps(error));},
+     error=>{setGps(false);setGpsIniciando(false);setMsg(mensagemGps(error));},
      {enableHighAccuracy:true,maximumAge:0,timeout:30000}
    );
  }
- function pararGps(){if(watchRef.current!==null&&"geolocation" in navigator)navigator.geolocation.clearWatch(watchRef.current);watchRef.current=null;setGps(false);setGpsIniciando(false);}
+ function pararGps(){if(watchRef.current!==null)navigator.geolocation.clearWatch(watchRef.current);watchRef.current=null;setGps(false);}
  async function sair(){pararGps();await supabase.auth.signOut();router.replace("/login");}
  if(loading)return <main className="min-h-screen bg-slate-950 p-6 text-white">Carregando operação...</main>;
  return <main className="min-h-screen bg-slate-950 pb-10 text-white"><header className="sticky top-0 z-10 border-b border-slate-800 bg-slate-950/95 px-4 py-4 backdrop-blur"><div className="mx-auto flex max-w-xl items-center justify-between"><div><p className="text-xs font-bold uppercase tracking-[.3em] text-amber-400">SGF Nobre</p><h1 className="text-xl font-bold">Área do motorista</h1></div><button onClick={sair} className="rounded-xl border border-slate-700 px-3 py-2 text-sm">Sair</button></div></header>
@@ -144,7 +146,7 @@ export default function MotoristaPage(){
  {!jornada?<div className="mt-6"><p className="text-sm text-slate-600">Nenhuma jornada ativa.</p><button disabled={salvando} onClick={()=>registrar("JORNADA_INICIADA")} className="mt-4 w-full rounded-2xl bg-amber-400 px-5 py-4 text-lg font-black">Iniciar jornada</button></div>:
  <div className="mt-5 rounded-2xl bg-slate-950 p-5 text-white"><p className="text-xs uppercase tracking-widest text-slate-400">Status atual</p><h3 className="mt-2 text-xl font-black text-amber-400">{ultimo?rotulos[ultimo.tipo_evento]:"Jornada ativa"}</h3><p className="mt-3 font-mono text-4xl font-bold">{ultimo?duracao(ultimo.ocorrido_em,agora):"00:00:00"}</p><p className="mt-1 text-xs text-slate-400">Iniciado às {ultimo?hora(ultimo.ocorrido_em):hora(jornada.iniciada_em)}</p></div>}
  </section>
- {jornada&&<section className="rounded-3xl border border-slate-800 bg-slate-900 p-4"><div className="flex items-center justify-between"><div><h3 className="font-bold">Rastreamento pelo celular</h3><p className="text-xs text-slate-400">Envia sua posição durante a jornada.</p></div><button onClick={gps?pararGps:iniciarGps} disabled={gpsIniciando} className={`rounded-xl px-4 py-3 font-bold ${gps?"bg-emerald-500 text-slate-950":"bg-slate-700"}`}>{gps?"GPS ativo":gpsIniciando?"Localizando...":"Ativar GPS"}</button></div></section>}
+ {jornada&&<section className="rounded-3xl border border-slate-800 bg-slate-900 p-4"><div className="flex items-center justify-between"><div><h3 className="font-bold">Rastreamento pelo celular</h3><p className="text-xs text-slate-400">Envia sua posição durante a jornada.</p></div><button disabled={gpsIniciando} onClick={gps?pararGps:()=>void iniciarGps()} className={`rounded-xl px-4 py-3 font-bold disabled:opacity-60 ${gps?"bg-emerald-500 text-slate-950":"bg-slate-700"}`}>{gps?"GPS ativo":gpsIniciando?"Localizando...":"Ativar GPS"}</button></div></section>}
  {msg&&<div className="rounded-2xl border border-red-800 bg-red-950/60 p-4 text-sm text-red-200">{msg}</div>}
  {jornada&&<section className="space-y-3">
    <p className="px-1 text-xs font-bold uppercase tracking-[.2em] text-slate-400">Próxima ação</p>
