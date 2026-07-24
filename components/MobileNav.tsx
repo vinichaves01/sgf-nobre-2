@@ -124,6 +124,22 @@ export default function MobileNav() {
               </Link>
 
               <Link
+                href="/central-operacoes"
+                onClick={() =>
+                  setMostrarMais(false)
+                }
+                className="rounded-2xl border bg-slate-50 p-4 text-center font-semibold text-slate-800"
+              >
+                <span className="block text-2xl">
+                  📍
+                </span>
+
+                <span className="mt-2 block">
+                  Central de Operações
+                </span>
+              </Link>
+
+              <Link
                 href="/relatorios"
                 onClick={() =>
                   setMostrarMais(false)

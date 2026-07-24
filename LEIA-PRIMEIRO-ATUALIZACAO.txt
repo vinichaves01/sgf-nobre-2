@@ -1,0 +1,23 @@
+SGF NOBRE — VERSÃO OPERACIONAL GPS (REVISADA)
+
+O banco já foi preparado com a migration 20260724_operacao_motorista_gps.sql.
+NÃO execute novamente o SQL se ele já retornou Success no Supabase.
+
+Antes de publicar, confirme na Vercel:
+- NEXT_PUBLIC_SUPABASE_URL
+- NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY OU NEXT_PUBLIC_SUPABASE_ANON_KEY
+- SUPABASE_SERVICE_ROLE_KEY (necessária para os módulos administrativos existentes)
+
+Rotas adicionadas:
+- /motorista
+- /central-operacoes
+
+Primeiro teste:
+1. Publique este projeto no GitHub/Vercel.
+2. Entre com o usuário motorista pelo celular.
+3. Autorize a localização.
+4. Inicie a jornada e ative o GPS.
+5. Entre como administrador em /central-operacoes.
+
+Observação: navegador móvel pode suspender a localização quando a tela fica bloqueada.
+Rastreamento contínuo em segundo plano exigirá uma futura versão nativa/PWA com suporte específico do aparelho.

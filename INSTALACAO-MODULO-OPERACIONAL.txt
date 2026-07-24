@@ -1,0 +1,15 @@
+SGF NOBRE — INSTALAÇÃO DO MÓDULO OPERACIONAL
+
+1. No Supabase, abra SQL Editor > New query.
+2. Cole e execute todo o arquivo:
+   supabase/migrations/20260724_operacao_motorista_gps.sql
+3. Em Database > Replication, confirme que eventos_operacionais e localizacoes_gps estão no Realtime.
+4. Confirme que cada motorista possui vínculo:
+   - perfis.motorista_id preenchido; ou
+   - motoristas.auth_user_id preenchido.
+5. Publique o projeto atualizado na Vercel.
+6. Motorista acessa /login e será enviado para /motorista.
+7. Administrador acessa /central-operacoes.
+
+OBSERVAÇÃO IMPORTANTE SOBRE GPS:
+Em navegador/PWA, o rastreamento funciona enquanto a página permanece ativa. Android e iPhone podem suspender o navegador com a tela bloqueada. Rastreamento realmente contínuo em segundo plano exige a etapa posterior de aplicativo nativo/Capacitor com permissão de localização em background.
